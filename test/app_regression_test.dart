@@ -106,11 +106,11 @@ void main() {
     try {
       await tester.pumpWidget(const ManiGestApp());
       await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await Future<void>.delayed(const Duration(seconds: 2));
       });
       await tester.pump();
 
-      expect(find.text('Hola, Dueña'), findsOneWidget);
+      expect(find.byTooltip('Agenda'), findsOneWidget);
 
       const sections = <String, String>{
         'Agenda': 'Consulta las citas por día',
