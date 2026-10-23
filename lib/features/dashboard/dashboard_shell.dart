@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../data/app_database.dart';
 import '../../services/whatsapp_service.dart';
 import '../appointments/appointment_form_page.dart';
+import '../appointments/appointment_status_chip.dart';
 import '../catalog/service_form_page.dart';
 import '../clients/client_form_page.dart';
 import '../messages/message_preview_page.dart';
@@ -516,28 +517,15 @@ class _DashboardShellState extends State<DashboardShell> {
             if (!compact) Text('${appointment['servicios_text'] ?? 'Sin servicios'} · ${_currency(appointment['precio_total'] as num)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
           ])),
           const SizedBox(width: 8),
-          _statusChip(appointment['estado'] as String? ?? 'Programada'),
+          AppointmentStatusChip(
+            status: appointment['estado'] as String? ?? 'Programada',
+            accentColor: _accent,
+          ),
           const SizedBox(width: 4),
           const Icon(Icons.chevron_right_rounded, color: Colors.grey),
         ]),
       ),
     );
-  }
-
-  Widget _statusChip(String status) {
-    final display = switch (status) {
-      'Pendiente_de_cerrar' => 'Pendiente',
-      'No_asistio' => 'No asistió',
-      _ => status,
-    };
-    final color = switch (status) {
-      'Terminada' => Colors.green,
-      'Cancelada' => Colors.red,
-      'No_asistio' => Colors.deepOrange,
-      'Pendiente_de_cerrar' => Colors.amber.shade800,
-      _ => _accent,
-    };
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(20)), child: Text(display, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700)));
   }
 
   Widget _agendaSection() {
