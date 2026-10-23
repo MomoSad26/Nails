@@ -36,12 +36,12 @@ class _MessagePreviewPageState extends State<MessagePreviewPage> {
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Row(children: [OutlinedButton.icon(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back_rounded, size: 18), label: const Text('Volver')), const SizedBox(width: 12), Expanded(child: Text(widget.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)))]),
     const SizedBox(height: 12),
-    Text(widget.phone == null ? 'Elige el contacto o grupo dentro de WhatsApp.' : 'Destinatario: ${widget.phone}', style: TextStyle(color: Colors.grey.shade700)),
+    Text(widget.phone == null ? 'Elige el contacto o grupo dentro de WhatsApp.' : 'Destinatario: ${widget.phone}', style: TextStyle(color: const Color(0xFFC0D0E0))),
     const SizedBox(height: 12),
     Expanded(child: TextField(controller: _message, maxLines: null, expands: true, textAlignVertical: TextAlignVertical.top, decoration: const InputDecoration(labelText: 'Mensaje editable', alignLabelWithHint: true, hintText: 'Edita el texto antes de abrir WhatsApp.'))),
     const SizedBox(height: 12),
     SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _opening ? null : _send, icon: _opening ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_rounded), label: Text(_opening ? 'Abriendo WhatsApp…' : 'Abrir WhatsApp'))),
     const SizedBox(height: 8),
-    Text('La app no puede confirmar si el mensaje se envió o fue leído.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+    Text('La app no puede confirmar si el mensaje se envió o fue leído.', style: TextStyle(fontSize: 11, color: const Color(0xFFA9BED2))),
   ]);
 }
