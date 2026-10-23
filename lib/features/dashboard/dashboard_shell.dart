@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import '../../data/app_database.dart';
 import '../../services/whatsapp_service.dart';
 import '../appointments/appointment_form_page.dart';
-import '../appointments/appointment_status_chip.dart';
+import '../../core/widgets/status_chip.dart';
 import '../catalog/service_form_page.dart';
 import '../clients/client_form_page.dart';
 import '../messages/message_preview_page.dart';
@@ -517,7 +517,7 @@ class _DashboardShellState extends State<DashboardShell> {
             if (!compact) Text('${appointment['servicios_text'] ?? 'Sin servicios'} · ${_currency(appointment['precio_total'] as num)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
           ])),
           const SizedBox(width: 8),
-          AppointmentStatusChip(
+          StatusChip(
             status: appointment['estado'] as String? ?? 'Programada',
             accentColor: _accent,
           ),
@@ -815,7 +815,7 @@ class _DashboardShellState extends State<DashboardShell> {
           }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Eliminar'))])),
           Expanded(child: ListView(children: [
             _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [CircleAvatar(radius: 25, backgroundColor: _accent.withValues(alpha: 0.14), foregroundColor: _accent, child: Text((client['nombre'] as String).substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))), const SizedBox(width: 12), Expanded(child: Text(client['nombre'] as String, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), _statusChip(active ? 'Activa' : 'Inactiva')]),
+              Row(children: [CircleAvatar(radius: 25, backgroundColor: _accent.withValues(alpha: 0.14), foregroundColor: _accent, child: Text((client['nombre'] as String).substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))), const SizedBox(width: 12), Expanded(child: Text(client['nombre'] as String, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), StatusChip(status: active ? 'Activa' : 'Inactiva', accentColor: _accent)]),
               const SizedBox(height: 18),
               _detailLine(Icons.phone_rounded, 'Teléfono', (phone?.isNotEmpty == true) ? phone! : 'Sin teléfono'),
               _detailLine(Icons.notes_rounded, 'Nota', (client['nota'] as String?)?.isNotEmpty == true ? client['nota'] as String : 'Sin notas'),
@@ -895,7 +895,7 @@ class _DashboardShellState extends State<DashboardShell> {
           }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar cita')), PopupMenuItem(value: 'delete', child: Text('Eliminar cita'))])),
           Expanded(child: ListView(children: [
             _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [Expanded(child: Text(appointment['clienta_nombre'] as String, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800))), _statusChip(status)]),
+              Row(children: [Expanded(child: Text(appointment['clienta_nombre'] as String, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800))), StatusChip(status: status, accentColor: _accent)]),
               const SizedBox(height: 14),
               _detailLine(Icons.calendar_today_rounded, 'Fecha', formatDateLong(date)),
               _detailLine(Icons.schedule_rounded, 'Hora', formatTime(date)),
