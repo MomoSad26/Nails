@@ -19,7 +19,8 @@ Future<void> main() async {
 }
 
 class ManiGestApp extends StatelessWidget {
-  const ManiGestApp({super.key});
+  const ManiGestApp({super.key, this.enableOverdueTimer = true});
+  final bool enableOverdueTimer;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +132,7 @@ class ManiGestApp extends StatelessWidget {
           textStyle: TextStyle(color: _lightText),
         ),
       ),
-      home: const DashboardShell(),
+      home: DashboardShell(enableOverdueTimer: enableOverdueTimer),
     );
   }
 }
