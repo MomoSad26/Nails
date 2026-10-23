@@ -93,7 +93,7 @@ jobs:
               -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
               -dname "CN=ManiGest, OU=Mobile, O=ManiGest, L=Miami, ST=Florida, C=US" \
               -noprompt
-            echo "::warning::No valid keystore Secrets were found. This APK uses a temporary signing key; preserve a private copy before relying on signature continuity for future updates."
+            echo "::warning::No valid keystore Secrets were found. This APK uses an ephemeral signing key; configure a persistent keystore in GitHub Actions Secrets before trying to update it with a later APK."
           fi
 
           cat > "$PROPERTIES_FILE" <<EOF
