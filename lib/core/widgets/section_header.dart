@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 /// Responsive heading shared by dashboard sections.
 class SectionHeader extends StatelessWidget {
-  const SectionHeader({
+  const SectionHeader(
+    this.title, {
     super.key,
-    required this.title,
     this.subtitle,
     this.trailing,
   });
