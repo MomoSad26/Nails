@@ -11,13 +11,17 @@ import '../../core/widgets/section_header.dart';
 import '../catalog/service_form_page.dart';
 import '../clients/client_form_page.dart';
 import '../messages/message_preview_page.dart';
-import 'navigation_sidebar.dart';
 import '../settings/settings_page.dart';
 import '../../utils/date_utils_es.dart';
 import '../../utils/text_normalizer.dart';
 
 class _PanelRoute {
-  _PanelRoute(this.kind, {this.section, this.title = '', Map<String, dynamic>? data}) : data = data ?? {};
+  _PanelRoute(this.kind, {this.section, this.title = '', Map<String, dynamic>? data})
+      : id = _nextId++,
+        data = data ?? {};
+
+  static int _nextId = 0;
+  final int id;
   final String kind;
   final String? section;
   final String title;
@@ -40,7 +44,9 @@ class DashboardShell extends StatefulWidget {
 class _DashboardShellState extends State<DashboardShell> {
   final AppDatabase _db = AppDatabase.instance;
   final List<_PanelRoute> _stack = [];
-  _PanelRoute _route = _PanelRoute('section', section: 'Inicio');
+  _PanelRoute _route = _PanelRoute('coins');
+  _PanelRoute? _outgoingRoute;
+  Timer? _outgoingTimer;
   Map<String, String> _settings = {};
   bool _loading = true;
   Timer? _transitionTimer;
@@ -55,9 +61,9 @@ class _DashboardShellState extends State<DashboardShell> {
   double _edgeSwipeDistance = 0;
 
   Color get _accent {
-    final raw = _settings['color_acento'] ?? '0xFFB76E79';
+    final raw = _settings['color_acento'] ?? '0xFF62DCEB';
     final parsed = int.tryParse(raw.replaceFirst('0x', ''), radix: 16);
-    return Color(parsed ?? 0xFFB76E79);
+    return Color(parsed ?? 0xFF62DCEB);
   }
 
   @override
@@ -74,6 +80,11 @@ class _DashboardShellState extends State<DashboardShell> {
     await _db.consolidateStaleDeletes();
     await _db.transitionOverdueAppointments();
     final settings = await _db.getSettings();
+    // Replace the former built-in rose accent but preserve any color the owner chose.
+    if (settings['color_acento'] == '0xFFB76E79') {
+      settings['color_acento'] = '0xFF62DCEB';
+      await _db.saveSettings({'color_acento': '0xFF62DCEB'});
+    }
     if (!mounted) return;
     setState(() {
       _settings = settings;
@@ -92,6 +103,7 @@ class _DashboardShellState extends State<DashboardShell> {
   void dispose() {
     _transitionTimer?.cancel();
     _undoTimer?.cancel();
+    _outgoingTimer?.cancel();
     super.dispose();
   }
 
@@ -139,25 +151,37 @@ class _DashboardShellState extends State<DashboardShell> {
   void _push(String kind, String title, {Map<String, dynamic>? data}) {
     if (_pendingUndo != null) ScaffoldMessenger.of(context).hideCurrentSnackBar();
     unawaited(_commitPendingUndo());
+    _outgoingTimer?.cancel();
     setState(() {
+      _outgoingRoute = null;
       _stack.add(_route);
-      _route = _PanelRoute(kind, title: title, data: data);
+      _route = _PanelRoute(kind,
+          section: kind == 'section' ? title : null,
+          title: title,
+          data: data);
     });
   }
 
   void _goBack() {
     if (_stack.isEmpty) return;
-    setState(() => _route = _stack.removeLast());
+    _outgoingTimer?.cancel();
+    final leaving = _route;
+    final previous = _stack.removeLast();
+    setState(() {
+      _route = previous;
+      _outgoingRoute = leaving;
+    });
+    _outgoingTimer = Timer(const Duration(milliseconds: 260), () {
+      if (!mounted || _outgoingRoute?.id != leaving.id) return;
+      setState(() => _outgoingRoute = null);
+    });
   }
 
   void _changeSection(String section) {
-    unawaited(_commitPendingUndo());
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    setState(() {
-      _stack.clear();
-      _route = _PanelRoute('section', section: section);
-      if (section == 'Agenda') _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
-    });
+    if (section == 'Agenda') {
+      _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
+    }
+    _push('section', section);
   }
 
   Future<bool> _confirm({required String title, required String message}) async {
@@ -235,12 +259,7 @@ class _DashboardShellState extends State<DashboardShell> {
 
   void _openCatalogPreservingForm(Map<String, dynamic> draft) {
     _route.data['draft'] = draft;
-    if (_pendingUndo != null) ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    unawaited(_commitPendingUndo());
-    setState(() {
-      _stack.add(_route);
-      _route = _PanelRoute('section', section: 'Catálogo', data: {'internal': true});
-    });
+    _push('section', 'Catálogo', data: {'internal': true});
   }
 
   Future<void> _openAppointmentForm({int? id, int? clientId, DateTime? date, bool reprogram = false, Map<String, dynamic>? draft}) async {
@@ -278,9 +297,9 @@ class _DashboardShellState extends State<DashboardShell> {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, size: 40, color: Colors.grey.shade400),
+            Icon(icon, size: 40, color: const Color(0xFF8399B0)),
             const SizedBox(height: 10),
-            Text(message, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700)),
+            Text(message, textAlign: TextAlign.center, style: TextStyle(color: const Color(0xFFC0D0E0))),
             if (action != null) ...[const SizedBox(height: 14), action],
           ]),
         ),
@@ -290,29 +309,127 @@ class _DashboardShellState extends State<DashboardShell> {
         onPressed: onPressed, icon: Icon(icon), label: Text(label),
       );
 
-  Widget _renderCurrentPanel() {
-    if (_route.kind == 'section') {
-      switch (_route.section) {
-        case 'Inicio': return _homeSection();
-        case 'Agenda': return _agendaSection();
-        case 'Citas': return _appointmentsSection();
-        case 'Clientes': return _clientsSection();
-        case 'Catálogo': return _catalogSection(internal: _route.data['internal'] == true);
-        case 'Ajustes': return _settingsSection();
+  Widget _coinsHome() {
+    final menus = <(String, IconData)>[
+      ('Inicio', Icons.home_rounded),
+      ('Agenda', Icons.calendar_month_rounded),
+      ('Citas', Icons.event_note_rounded),
+      ('Clientes', Icons.groups_rounded),
+      ('Catálogo', Icons.spa_rounded),
+      ('Ajustes', Icons.settings_rounded),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 620 ? 3 : 2;
+      return SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 84, height: 84,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF102A43),
+                    border: Border.all(color: const Color(0xFFF3C969), width: 1.5),
+                    boxShadow: const [BoxShadow(color: Color(0x332EBCD0), blurRadius: 20, spreadRadius: 1)],
+                  ),
+                  child: const Center(child: Icon(Icons.spa_rounded, size: 43, color: Color(0xFFF3C969))),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _settings['nombre_negocio'] ?? 'Mi negocio de uñas',
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFFF0F6FF)),
+                ),
+                const SizedBox(height: 5),
+                const Text('TU ESPACIO DE TRABAJO',
+                  style: TextStyle(fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w700, color: Color(0xFF9EB3C9))),
+                const SizedBox(height: 24),
+                GridView.count(
+                  crossAxisCount: columns,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: columns == 2 ? 1.22 : 1.48,
+                  children: menus.map((item) => _CoinMenuButton(
+                    key: ValueKey('menu-${item.$1}'),
+                    label: item.$1,
+                    icon: item.$2,
+                    onTap: () => _changeSection(item.$1),
+                  )).toList(),
+                ),
+                const SizedBox(height: 14),
+              ]),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  Widget _renderPanelFor(_PanelRoute route) {
+    if (route.kind == 'coins') return _coinsHome();
+    if (route.kind == 'section') {
+      final Widget sectionContent;
+      switch (route.section) {
+        case 'Inicio':
+          sectionContent = _homeSection();
+          break;
+        case 'Agenda':
+          sectionContent = _agendaSection();
+          break;
+        case 'Citas':
+          sectionContent = _appointmentsSection();
+          break;
+        case 'Clientes':
+          sectionContent = _clientsSection();
+          break;
+        case 'Catálogo':
+          sectionContent = _catalogSection(internal: route.data['internal'] == true);
+          break;
+        case 'Ajustes':
+          sectionContent = _settingsSection();
+          break;
+        default:
+          sectionContent = const Center(child: Text('Pantalla no encontrada'));
       }
+      if (route.section == 'Catálogo' && route.data['internal'] == true) {
+        return sectionContent;
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _goBack,
+              icon: const Icon(Icons.arrow_back_rounded, size: 18),
+              label: const Text('Volver'),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Expanded(child: sectionContent),
+        ],
+      );
     }
-    switch (_route.kind) {
-      case 'client_detail': return _clientDetailPage(_route.data['id'] as int);
+    switch (route.kind) {
+      case 'client_detail': return _clientDetailPage(route.data['id'] as int);
       case 'client_form': return ClientFormPage(
         db: _db,
-        key: ValueKey('client-form-${_route.data['id'] ?? 'new'}-${_route.data['returnToAppointment'] == true}'),
-        initial: _route.data['id'] == null ? null : _route.data['client'] as Map<String, Object?>?,
-        clientId: _route.data['id'] as int?,
-        onCreateClient: _route.data['returnToAppointment'] == true,
+        key: ValueKey('client-form-${route.data['id'] ?? 'new'}-${route.data['returnToAppointment'] == true}'),
+        initial: route.data['id'] == null ? null : route.data['client'] as Map<String, Object?>?,
+        clientId: route.data['id'] as int?,
+        onCreateClient: route.data['returnToAppointment'] == true,
         onBack: _goBack,
         onSave: (id) async {
           await _refresh();
-          if (_route.data['returnToAppointment'] == true && _stack.isNotEmpty && _stack.last.kind == 'appointment_form') {
+          if (route.data['returnToAppointment'] == true && _stack.isNotEmpty && _stack.last.kind == 'appointment_form') {
             final previous = _stack.last;
             previous.data['clientId'] = id;
             final draft = Map<String, dynamic>.from(previous.data['draft'] as Map<String, dynamic>? ?? {});
@@ -322,37 +439,37 @@ class _DashboardShellState extends State<DashboardShell> {
           _goBack();
         },
       );
-      case 'appointment_detail': return _appointmentDetailPage(_route.data['id'] as int);
+      case 'appointment_detail': return _appointmentDetailPage(route.data['id'] as int);
       case 'appointment_form': return AppointmentFormPage(
-        key: ValueKey('appointment-form-${_route.data['id'] ?? 'new'}-${_route.data['date'] ?? ''}-${_route.data['clientId'] ?? ''}'),
+        key: ValueKey('appointment-form-${route.data['id'] ?? 'new'}-${route.data['date'] ?? ''}-${route.data['clientId'] ?? ''}'),
         db: _db,
-        initialId: _route.data['id'] as int?,
-        initialClientId: _route.data['clientId'] as int?,
-        initialDate: _route.data['date'] as DateTime?,
-        initialDraft: _route.data['draft'] as Map<String, dynamic>?,
-        resetStatusOnSave: _route.data['reprogram'] == true,
+        initialId: route.data['id'] as int?,
+        initialClientId: route.data['clientId'] as int?,
+        initialDate: route.data['date'] as DateTime?,
+        initialDraft: route.data['draft'] as Map<String, dynamic>?,
+        resetStatusOnSave: route.data['reprogram'] == true,
         onBack: _goBack,
         currency: _currency,
         onOpenCatalog: (draft) => _openCatalogPreservingForm(draft),
         onCreateClient: (draft) {
-          _route.data['draft'] = draft;
+          route.data['draft'] = draft;
           _push('client_form', 'Agregar clienta', data: {'returnToAppointment': true});
         },
         onSaved: () async { await _refresh(); _goBack(); },
       );
       case 'service_form': return ServiceFormPage(
-        key: ValueKey('service-form-${_route.data['id'] ?? 'new'}'),
+        key: ValueKey('service-form-${route.data['id'] ?? 'new'}'),
         db: _db,
-        service: _route.data['service'] as Map<String, Object?>?,
+        service: route.data['service'] as Map<String, Object?>?,
         onBack: _goBack,
         currency: _currency,
         onSaved: () async { await _refresh(); _goBack(); },
       );
-      case 'agenda_day': return _agendaDayPage(_route.data['date'] as DateTime);
+      case 'agenda_day': return _agendaDayPage(route.data['date'] as DateTime);
       case 'whatsapp_preview': return MessagePreviewPage(
-        initialText: _route.data['message'] as String,
-        phone: _route.data['phone'] as String?,
-        title: _route.data['title'] as String? ?? 'Mensaje de WhatsApp',
+        initialText: route.data['message'] as String,
+        phone: route.data['phone'] as String?,
+        title: route.data['title'] as String? ?? 'Mensaje de WhatsApp',
         onBack: _goBack,
       );
     }
@@ -362,40 +479,69 @@ class _DashboardShellState extends State<DashboardShell> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final routeEntries = <_PanelRoute>[..._stack, _route];
+    final outgoing = _outgoingRoute;
+    if (outgoing != null && !routeEntries.any((item) => item.id == outgoing.id)) {
+      routeEntries.add(outgoing);
+    }
+    final colorScheme = Theme.of(context).colorScheme.copyWith(
+      primary: _accent,
+      onPrimary: const Color(0xFF071A2B),
+      surface: const Color(0xFF102A43),
+      onSurface: const Color(0xFFF0F6FF),
+      outline: const Color(0xFF55718D),
+    );
     return PopScope<Object?>(
-      canPop: _stack.isEmpty,
+      canPop: _stack.isEmpty && _outgoingRoute == null,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _stack.isNotEmpty) _goBack();
       },
       child: Theme(
-        data: Theme.of(context).copyWith(colorScheme: ColorScheme.fromSeed(seedColor: _accent)),
+        data: Theme.of(context).copyWith(colorScheme: colorScheme),
         child: Scaffold(
-        body: SafeArea(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onHorizontalDragStart: (details) { _edgeSwipeActive = details.localPosition.dx <= 24 && _stack.isNotEmpty; _edgeSwipeDistance = 0; },
-            onHorizontalDragUpdate: (details) { if (_edgeSwipeActive) _edgeSwipeDistance += details.primaryDelta ?? 0; },
-            onHorizontalDragEnd: (details) { if (_edgeSwipeActive && _edgeSwipeDistance > 80) _goBack(); _edgeSwipeActive = false; _edgeSwipeDistance = 0; },
-            child: Row(children: [
-            NavigationSidebar(
-              activeSection: _route.kind == 'section' ? _route.section : null,
-              accentColor: _accent,
-              onSelected: _changeSection,
+          body: SafeArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragStart: (details) {
+                _edgeSwipeActive = details.localPosition.dx <= 24 && _stack.isNotEmpty;
+                _edgeSwipeDistance = 0;
+              },
+              onHorizontalDragUpdate: (details) {
+                if (_edgeSwipeActive) _edgeSwipeDistance += details.primaryDelta ?? 0;
+              },
+              onHorizontalDragEnd: (details) {
+                if (_edgeSwipeActive && _edgeSwipeDistance > 80) _goBack();
+                _edgeSwipeActive = false;
+                _edgeSwipeDistance = 0;
+              },
+              child: Stack(children: routeEntries.map((entry) {
+                final isCurrent = entry.id == _route.id;
+                final isOutgoing = entry.id == _outgoingRoute?.id;
+                return Positioned.fill(
+                  key: ValueKey('route-pane-${entry.id}'),
+                  child: Offstage(
+                    offstage: !isCurrent && !isOutgoing,
+                    child: TickerMode(
+                      enabled: isCurrent || isOutgoing,
+                      child: IgnorePointer(
+                        ignoring: !isCurrent,
+                        child: _RouteWindow(
+                          key: ValueKey('route-window-${entry.id}'),
+                          exiting: isOutgoing,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+                            child: _renderPanelFor(entry),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList()),
             ),
-            Expanded(
-              child: Container(
-                color: const Color(0xFFFFFAFA),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
-                  child: _renderCurrentPanel(),
-                ),
-              ),
-            ),
-          ]),
           ),
         ),
-        ),
-        ),
+      ),
     );
   }
 
@@ -429,7 +575,7 @@ class _DashboardShellState extends State<DashboardShell> {
         final greeting = _settings['nombre_duena'] ?? 'Dueña';
         return ListView(children: [
           SectionHeader('Hola, $greeting', subtitle: formatDateWithWeekday(now)),
-          Text('Hoy tienes $todayCount ${todayCount == 1 ? 'cita' : 'citas'}.', style: TextStyle(color: Colors.grey.shade700)),
+          Text('Hoy tienes $todayCount ${todayCount == 1 ? 'cita' : 'citas'}.', style: TextStyle(color: const Color(0xFFC0D0E0))),
           const SizedBox(height: 18),
           if (upcoming.isNotEmpty) _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [Icon(Icons.star_rounded, color: _accent), const SizedBox(width: 8), const Text('Próxima cita', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17))]),
@@ -500,7 +646,7 @@ class _DashboardShellState extends State<DashboardShell> {
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${appointment['clienta_nombre'] ?? 'Clienta'}', style: const TextStyle(fontWeight: FontWeight.w700)),
-            if (!compact) Text('${appointment['servicios_text'] ?? 'Sin servicios'} · ${_currency(appointment['precio_total'] as num)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+            if (!compact) Text('${appointment['servicios_text'] ?? 'Sin servicios'} · ${_currency(appointment['precio_total'] as num)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: const Color(0xFFC0D0E0))),
           ])),
           const SizedBox(width: 8),
           StatusChip(
@@ -508,7 +654,7 @@ class _DashboardShellState extends State<DashboardShell> {
             accentColor: _accent,
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+          const Icon(Icons.chevron_right_rounded, color: Color(0xFFA9BED2)),
         ]),
       ),
     );
@@ -554,12 +700,12 @@ class _DashboardShellState extends State<DashboardShell> {
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: today ? _accent.withValues(alpha: 0.12) : Colors.white,
+                      color: today ? _accent.withValues(alpha: 0.12) : const Color(0xFF17334E),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: today ? _accent : const Color(0xFFF0E3E5), width: today ? 1.5 : 1),
+                      border: Border.all(color: today ? _accent : const Color(0xFF36516B), width: today ? 1.5 : 1),
                     ),
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Text('$dayNumber', style: TextStyle(fontWeight: today ? FontWeight.w800 : FontWeight.w500, color: today ? _accent : Colors.black87)),
+                      Text('$dayNumber', style: TextStyle(fontWeight: today ? FontWeight.w800 : FontWeight.w500, color: today ? _accent : const Color(0xFFF0F6FF))),
                       const SizedBox(height: 3),
                       if (count > 0) Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(12)), child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)))
                       else const SizedBox(height: 14),
@@ -662,7 +808,7 @@ class _DashboardShellState extends State<DashboardShell> {
               ? _empty(_appointmentsTab == 1 ? 'No tienes citas pendientes de cerrar' : _appointmentsTab == 2 ? 'Todavía no hay citas en el historial' : 'No hay citas programadas', action: _appointmentsTab == 2 ? null : _primaryButton('Agregar cita', () => _openAppointmentForm()))
               : ListView.separated(itemCount: selected.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (_, index) => _appointmentListTile(selected[index]))),
           const SizedBox(height: 4),
-          Text('Mantén pulsada una cita para abrir el menú rápido.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          Text('Mantén pulsada una cita para abrir el menú rápido.', style: TextStyle(fontSize: 11, color: const Color(0xFFA9BED2))),
         ]);
       },
     );
@@ -821,7 +967,7 @@ class _DashboardShellState extends State<DashboardShell> {
               ]),
               if (phone?.isNotEmpty != true || !notify) ...[
                 const SizedBox(height: 8),
-                Text(phone?.isNotEmpty != true ? 'Agrega un teléfono para preparar mensajes.' : 'Las notificaciones están desactivadas para esta clienta.', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                Text(phone?.isNotEmpty != true ? 'Agrega un teléfono para preparar mensajes.' : 'Las notificaciones están desactivadas para esta clienta.', style: TextStyle(color: const Color(0xFFC0D0E0), fontSize: 12)),
               ],
             ])),
             const SizedBox(height: 12),
@@ -837,7 +983,7 @@ class _DashboardShellState extends State<DashboardShell> {
                   const SizedBox(width: 10),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('${formatDateCompact(DateTime.parse(appointment['fecha_hora'] as String))} · ${formatTime(DateTime.parse(appointment['fecha_hora'] as String))}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text('${appointment['servicios_text'] ?? 'Sin servicios'}${appointment['estado'] == 'Programada' || appointment['estado'] == 'Pendiente_de_cerrar' ? '' : ' · ${_statusText(appointment['estado'] as String)}'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                    Text('${appointment['servicios_text'] ?? 'Sin servicios'}${appointment['estado'] == 'Programada' || appointment['estado'] == 'Pendiente_de_cerrar' ? '' : ' · ${_statusText(appointment['estado'] as String)}'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: const Color(0xFFC0D0E0))),
                   ])),
                   const SizedBox(width: 6),
                   Text(_currency(appointment['precio_total'] as num), style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -860,7 +1006,7 @@ class _DashboardShellState extends State<DashboardShell> {
 
   Widget _detailLine(IconData icon, String label, String value) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 19, color: _accent), const SizedBox(width: 10), SizedBox(width: 125, child: Text(label, style: TextStyle(color: Colors.grey.shade700))), Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))) ]),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 19, color: _accent), const SizedBox(width: 10), SizedBox(width: 125, child: Text(label, style: TextStyle(color: const Color(0xFFC0D0E0)))), Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))) ]),
       );
 
   Widget _appointmentDetailPage(int id) {
@@ -996,9 +1142,110 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 }
 
+class _RouteWindow extends StatefulWidget {
+  const _RouteWindow({super.key, required this.child, required this.exiting});
+  final Widget child;
+  final bool exiting;
+
+  @override
+  State<_RouteWindow> createState() => _RouteWindowState();
+}
+
+class _RouteWindowState extends State<_RouteWindow> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 250),
+    reverseDuration: const Duration(milliseconds: 230),
+  );
+  late final Animation<double> _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+  late final Animation<Offset> _slide = Tween<Offset>(
+    begin: const Offset(0.035, 0.012), end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RouteWindow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.exiting != widget.exiting) {
+      if (widget.exiting) {
+        _controller.reverse();
+      } else {
+        _controller.forward(from: 0);
+      }
+    }
+  }
+
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _fade, child: SlideTransition(position: _slide, child: widget.child),
+  );
+}
+
+class _CoinMenuButton extends StatefulWidget {
+  const _CoinMenuButton({super.key, required this.label, required this.icon, required this.onTap});
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  State<_CoinMenuButton> createState() => _CoinMenuButtonState();
+}
+
+class _CoinMenuButtonState extends State<_CoinMenuButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 210),
+  );
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween<double>(begin: 1, end: 0.90).chain(CurveTween(curve: Curves.easeOut)), weight: 28),
+    TweenSequenceItem(tween: Tween<double>(begin: 0.90, end: 1.045).chain(CurveTween(curve: Curves.easeOutBack)), weight: 42),
+    TweenSequenceItem(tween: Tween<double>(begin: 1.045, end: 1).chain(CurveTween(curve: Curves.easeOut)), weight: 30),
+  ]).animate(_controller);
+
+  Future<void> _select() async {
+    if (_controller.isAnimating) return;
+    await _controller.forward(from: 0).orCancel;
+    if (mounted) widget.onTap();
+  }
+
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => ScaleTransition(
+    scale: _scale,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _select,
+      child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+          width: 82, height: 82,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFF1D4965), Color(0xFF102A43)]),
+            border: Border.all(color: const Color(0xFF6C9DB3), width: 1.4),
+            boxShadow: const [BoxShadow(color: Color(0x332EBCD0), blurRadius: 12, offset: Offset(0, 5))],
+          ),
+          child: Center(child: Icon(widget.icon, size: 34, color: const Color(0xFF62DCEB))),
+        ),
+        const SizedBox(height: 7),
+        Text(widget.label, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFFF0F6FF))),
+      ]),
+    ),
+  );
+}
+
 class _WeekdayLabel extends StatelessWidget {
   const _WeekdayLabel(this.value);
   final String value;
   @override
-  Widget build(BuildContext context) => Expanded(child: Center(child: Text(value, style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade600))));
+  Widget build(BuildContext context) => Expanded(child: Center(child: Text(value, style: TextStyle(fontWeight: FontWeight.w700, color: const Color(0xFFA9BED2)))));
 }
