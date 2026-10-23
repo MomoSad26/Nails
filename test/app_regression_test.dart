@@ -104,12 +104,14 @@ void main() {
 
   testWidgets('navegación: abre Agenda, Citas, Clientes, Catálogo y Ajustes', (tester) async {
     try {
-      await tester.pumpWidget(const ManiGestApp());
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(seconds: 2));
-      });
-      await tester.pump();
+      Future<void> pumpUntilFound(Finder finder) async {
+        for (var i = 0; i < 20 && finder.evaluate().isEmpty; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+      }
 
+      await tester.pumpWidget(const ManiGestApp());
+      await pumpUntilFound(find.byTooltip('Agenda'));
       expect(find.byTooltip('Agenda'), findsOneWidget);
 
       const sections = <String, String>{
@@ -122,10 +124,7 @@ void main() {
 
       for (final entry in sections.entries) {
         await tester.tap(find.byTooltip(entry.key));
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await pumpUntilFound(find.text(entry.value));
         expect(find.text(entry.value), findsOneWidget, reason: 'Debe abrir la sección');
       }
     } finally {
