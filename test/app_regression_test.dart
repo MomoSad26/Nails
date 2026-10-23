@@ -107,12 +107,16 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(const ManiGestApp(enableOverdueTimer: false));
-    // SQLite usa un isolate real; dejar que termine la inicialización sin
-    // depender de pumpAndSettle, que no puede estabilizar indicadores animados.
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(seconds: 1));
-    });
-    await tester.pump();
+
+    // SQLite usa un isolate real; alternar tiempo real y frames sin pumpAndSettle.
+    for (var attempt = 0;
+        attempt < 20 && find.byKey(const ValueKey('menu-Inicio')).evaluate().isEmpty;
+        attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+    }
 
     const sections = ['Inicio', 'Agenda', 'Citas', 'Clientes', 'Catálogo', 'Ajustes'];
     for (final section in sections) {
@@ -120,12 +124,14 @@ void main() {
     }
 
     await tester.tap(find.byKey(const ValueKey('menu-Clientes')));
-    await tester.pump(const Duration(milliseconds: 230));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    });
-    await tester.pump();
+    for (var attempt = 0;
+        attempt < 20 && find.text('Volver').evaluate().isEmpty;
+        attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('Volver'), findsOneWidget);
 
     await tester.tap(find.text('Volver'));
