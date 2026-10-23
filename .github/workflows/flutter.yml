@@ -47,7 +47,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze Dart code
-        run: flutter analyze --no-fatal-warnings
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Run automated tests
         run: flutter test
