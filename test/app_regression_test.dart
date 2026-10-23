@@ -110,6 +110,9 @@ void main() {
         }
       }
 
+      await db.consolidateStaleDeletes();
+      await db.transitionOverdueAppointments();
+      await db.getSettings();
       await tester.pumpWidget(const ManiGestApp());
       await pumpUntilFound(find.byTooltip('Agenda'));
       expect(find.byTooltip('Agenda'), findsOneWidget);
