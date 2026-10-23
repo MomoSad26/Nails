@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../../data/app_database.dart';
 import '../../services/whatsapp_service.dart';
 import '../appointments/appointment_form_page.dart';
+import '../../core/widgets/status_chip.dart';
+import '../../core/widgets/section_header.dart';
 import '../catalog/service_form_page.dart';
 import '../clients/client_form_page.dart';
 import '../messages/message_preview_page.dart';
@@ -268,21 +270,6 @@ class _DashboardShellState extends State<DashboardShell> {
         ]),
       );
 
-  Widget _sectionHeader(String title, {String? subtitle, Widget? trailing}) => Padding(
-        padding: const EdgeInsets.only(bottom: 18),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final titleBlock = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-            if (subtitle != null) ...[const SizedBox(height: 5), Text(subtitle, style: TextStyle(color: Colors.grey.shade700))],
-          ]);
-          if (trailing == null) return titleBlock;
-          if (constraints.maxWidth < 360) {
-            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [titleBlock, const SizedBox(height: 10), Align(alignment: Alignment.centerLeft, child: trailing)]);
-          }
-          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: titleBlock), trailing]);
-        }),
-      );
-
   Widget _bodyCard({required Widget child, EdgeInsets padding = const EdgeInsets.all(16)}) => Card(
         child: Padding(padding: padding, child: child),
       );
@@ -441,7 +428,7 @@ class _DashboardShellState extends State<DashboardShell> {
         }).length;
         final greeting = _settings['nombre_duena'] ?? 'Dueña';
         return ListView(children: [
-          _sectionHeader('Hola, $greeting', subtitle: formatDateWithWeekday(now)),
+          SectionHeader('Hola, $greeting', subtitle: formatDateWithWeekday(now)),
           Text('Hoy tienes $todayCount ${todayCount == 1 ? 'cita' : 'citas'}.', style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 18),
           if (upcoming.isNotEmpty) _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -516,28 +503,15 @@ class _DashboardShellState extends State<DashboardShell> {
             if (!compact) Text('${appointment['servicios_text'] ?? 'Sin servicios'} · ${_currency(appointment['precio_total'] as num)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
           ])),
           const SizedBox(width: 8),
-          _statusChip(appointment['estado'] as String? ?? 'Programada'),
+          StatusChip(
+            status: appointment['estado'] as String? ?? 'Programada',
+            accentColor: _accent,
+          ),
           const SizedBox(width: 4),
           const Icon(Icons.chevron_right_rounded, color: Colors.grey),
         ]),
       ),
     );
-  }
-
-  Widget _statusChip(String status) {
-    final display = switch (status) {
-      'Pendiente_de_cerrar' => 'Pendiente',
-      'No_asistio' => 'No asistió',
-      _ => status,
-    };
-    final color = switch (status) {
-      'Terminada' => Colors.green,
-      'Cancelada' => Colors.red,
-      'No_asistio' => Colors.deepOrange,
-      'Pendiente_de_cerrar' => Colors.amber.shade800,
-      _ => _accent,
-    };
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(20)), child: Text(display, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700)));
   }
 
   Widget _agendaSection() {
@@ -551,7 +525,7 @@ class _DashboardShellState extends State<DashboardShell> {
         final cellCount = ((firstWeekday - 1 + days) / 7).ceil() * 7;
         final monthTitle = DateFormat('MMMM y', 'es').format(_calendarMonth);
         return ListView(children: [
-          _sectionHeader('Agenda', subtitle: 'Consulta las citas por día'),
+          SectionHeader('Agenda', subtitle: 'Consulta las citas por día'),
           _bodyCard(child: Column(children: [
             Row(children: [
               IconButton(tooltip: 'Mes anterior', onPressed: () => setState(() => _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month - 1)), icon: const Icon(Icons.chevron_left_rounded)),
@@ -651,7 +625,7 @@ class _DashboardShellState extends State<DashboardShell> {
           }
         }).toList();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _sectionHeader('Citas', subtitle: 'Organiza, actualiza y consulta el historial', trailing: _primaryButton('Agregar cita', () => _openAppointmentForm())),
+          SectionHeader('Citas', subtitle: 'Organiza, actualiza y consulta el historial', trailing: _primaryButton('Agregar cita', () => _openAppointmentForm())),
           LayoutBuilder(builder: (context, constraints) {
             if (constraints.maxWidth < 360) {
               return DropdownButtonFormField<int>(
@@ -726,7 +700,7 @@ class _DashboardShellState extends State<DashboardShell> {
         final query = normalizeSearch(_clientSearch);
         final clients = snapshot.data!.where((client) => query.isEmpty || normalizeSearch('${client['nombre']} ${client['telefono'] ?? ''}').contains(query)).toList();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _sectionHeader('Clientes', subtitle: 'Ficha, contacto e historial de citas', trailing: _primaryButton('Agregar clienta', () => _push('client_form', 'Agregar clienta'))),
+          SectionHeader('Clientes', subtitle: 'Ficha, contacto e historial de citas', trailing: _primaryButton('Agregar clienta', () => _push('client_form', 'Agregar clienta'))),
           TextField(
             decoration: const InputDecoration(prefixIcon: Icon(Icons.search_rounded), labelText: 'Buscar por nombre o teléfono', hintText: 'Admite tildes y mayúsculas diferentes'),
             onChanged: (value) => setState(() => _clientSearch = value),
@@ -790,7 +764,7 @@ class _DashboardShellState extends State<DashboardShell> {
         ]);
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if (internal) ...[_pageHeader('Catálogo'), Align(alignment: Alignment.centerLeft, child: catalogActions)]
-          else _sectionHeader('Catálogo', subtitle: 'Servicios, precios y lista para compartir', trailing: catalogActions),
+          else SectionHeader('Catálogo', subtitle: 'Servicios, precios y lista para compartir', trailing: catalogActions),
           Expanded(child: DefaultTabController(length: 2, child: Column(children: [
             const TabBar(tabs: [Tab(text: 'Activos'), Tab(text: 'Inactivos')]),
             Expanded(child: TabBarView(children: [serviceList(active, inactiveList: false), serviceList(inactive, inactiveList: true)])),
@@ -827,7 +801,7 @@ class _DashboardShellState extends State<DashboardShell> {
           }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Eliminar'))])),
           Expanded(child: ListView(children: [
             _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [CircleAvatar(radius: 25, backgroundColor: _accent.withValues(alpha: 0.14), foregroundColor: _accent, child: Text((client['nombre'] as String).substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))), const SizedBox(width: 12), Expanded(child: Text(client['nombre'] as String, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), _statusChip(active ? 'Activa' : 'Inactiva')]),
+              Row(children: [CircleAvatar(radius: 25, backgroundColor: _accent.withValues(alpha: 0.14), foregroundColor: _accent, child: Text((client['nombre'] as String).substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))), const SizedBox(width: 12), Expanded(child: Text(client['nombre'] as String, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), StatusChip(status: active ? 'Activa' : 'Inactiva', accentColor: _accent)]),
               const SizedBox(height: 18),
               _detailLine(Icons.phone_rounded, 'Teléfono', (phone?.isNotEmpty == true) ? phone! : 'Sin teléfono'),
               _detailLine(Icons.notes_rounded, 'Nota', (client['nota'] as String?)?.isNotEmpty == true ? client['nota'] as String : 'Sin notas'),
@@ -907,7 +881,7 @@ class _DashboardShellState extends State<DashboardShell> {
           }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar cita')), PopupMenuItem(value: 'delete', child: Text('Eliminar cita'))])),
           Expanded(child: ListView(children: [
             _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [Expanded(child: Text(appointment['clienta_nombre'] as String, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800))), _statusChip(status)]),
+              Row(children: [Expanded(child: Text(appointment['clienta_nombre'] as String, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800))), StatusChip(status: status, accentColor: _accent)]),
               const SizedBox(height: 14),
               _detailLine(Icons.calendar_today_rounded, 'Fecha', formatDateLong(date)),
               _detailLine(Icons.schedule_rounded, 'Hora', formatTime(date)),
