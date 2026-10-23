@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 
 import 'data/app_database.dart';
+import 'services/whatsapp_service.dart';
 import 'features/appointments/appointment_form_page.dart';
 import 'features/catalog/service_form_page.dart';
 import 'features/clients/client_form_page.dart';
