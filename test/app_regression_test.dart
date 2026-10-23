@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:manigest/data/app_database.dart';
-import 'package:manigest/features/dashboard/navigation_sidebar.dart';
+import 'package:manigest/main.dart';
 
 void main() {
   final db = AppDatabase.instance;
@@ -102,24 +102,26 @@ void main() {
     expect((await db.getClient(clientId))?['nombre'], 'María');
   });
 
-  testWidgets('navegación: el panel permite seleccionar cada módulo', (tester) async {
-    String? selected;
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: NavigationSidebar(
-          activeSection: 'Inicio',
-          accentColor: Colors.pink,
-          onSelected: (section) => selected = section,
-        ),
-      ),
-    ));
+  testWidgets('navegación: la pantalla de monedas abre menús y Volver regresa al inicio', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const ManiGestApp());
+    await tester.pumpAndSettle();
 
     const sections = ['Inicio', 'Agenda', 'Citas', 'Clientes', 'Catálogo', 'Ajustes'];
     for (final section in sections) {
-      await tester.tap(find.byTooltip(section));
-      await tester.pump();
-      expect(selected, section);
+      expect(find.byKey(ValueKey('menu-$section')), findsOneWidget);
     }
+
+    await tester.tap(find.byKey(const ValueKey('menu-Clientes')));
+    await tester.pumpAndSettle();
+    expect(find.text('Volver'), findsOneWidget);
+    expect(find.text('Ficha, contacto e historial de citas'), findsOneWidget);
+
+    await tester.tap(find.text('Volver'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('menu-Clientes')), findsOneWidget);
   });
 
 }
