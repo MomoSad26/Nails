@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   verify-and-build:
-    name: Analyze, test, and build Android APK
+    name: Analyze, test, and build signed Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -52,13 +52,112 @@ jobs:
       - name: Run automated tests
         run: flutter test
 
-      - name: Build debug APK
-        run: flutter build apk --debug
+      - name: Prepare Android release signing key
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 || secrets.SIGNING_KEY_BASE64 || secrets.UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD || secrets.KEY_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS || secrets.KEYSTORE_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_FILE="$GITHUB_WORKSPACE/android/app/manigest-upload-key.jks"
+          PROPERTIES_FILE="$GITHUB_WORKSPACE/android/key.properties"
+          mkdir -p android/app
+          GENERATED=false
 
-      - name: Upload debug APK
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && [ -n "${ANDROID_KEY_ALIAS:-}" ] && [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+            if printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE" 2>/dev/null &&
+               keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null 2>&1; then
+              STORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+              KEY_ALIAS="$ANDROID_KEY_ALIAS"
+              KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
+              echo "Using the signing key configured in GitHub Actions Secrets."
+            else
+              rm -f "$KEYSTORE_FILE"
+              GENERATED=true
+            fi
+          else
+            GENERATED=true
+          fi
+
+          if [ "$GENERATED" = true ]; then
+            STORE_PASSWORD="$(openssl rand -hex 24)"
+            KEY_PASSWORD="$STORE_PASSWORD"
+            KEY_ALIAS="manigest"
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_FILE" \
+              -storetype JKS \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+              -dname "CN=ManiGest, OU=Mobile, O=ManiGest, L=Miami, ST=Florida, C=US" \
+              -noprompt
+            echo "::warning::No valid keystore Secrets were found. This APK uses a temporary signing key; preserve a private copy before relying on signature continuity for future updates."
+          fi
+
+          cat > "$PROPERTIES_FILE" <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=app/manigest-upload-key.jks
+          EOF
+          echo "generated=$GENERATED" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Gradle to use the release signing key
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/app/build.gradle.kts")
+          text = path.read_text(encoding="utf-8")
+
+          properties = '''import java.io.FileInputStream
+          import java.util.Properties
+
+          val manigestSigningProperties = Properties()
+          val manigestSigningFile = rootProject.file("key.properties")
+          if (manigestSigningFile.exists()) {
+              FileInputStream(manigestSigningFile).use { manigestSigningProperties.load(it) }
+          }
+
+          '''
+          if "manigestSigningProperties" not in text:
+              if "android {\n" not in text:
+                  raise SystemExit("No se encontró android {} en build.gradle.kts")
+              text = text.replace("android {\n", properties + "android {\n", 1)
+
+          signing_config = '''    signingConfigs {
+                  create("release") {
+                      keyAlias = manigestSigningProperties["keyAlias"] as String
+                      keyPassword = manigestSigningProperties["keyPassword"] as String
+                      storeFile = rootProject.file(manigestSigningProperties["storeFile"] as String)
+                      storePassword = manigestSigningProperties["storePassword"] as String
+                  }
+              }
+
+          '''
+          if 'create("release")' not in text:
+              text = text.replace("android {\n", "android {\n" + signing_config, 1)
+
+          text = text.replace(
+              'signingConfig = signingConfigs.getByName("debug")',
+              'signingConfig = signingConfigs.getByName("release")'
+          )
+
+          if 'signingConfig = signingConfigs.getByName("release")' not in text:
+              raise SystemExit("No se pudo asignar signingConfig de release")
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Build signed release APK
+        run: flutter build apk --release
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: manigest-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: manigest-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
