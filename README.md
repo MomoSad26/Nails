@@ -55,13 +55,15 @@ El APK se genera en `build/app/outputs/flutter-apk/app-debug.apk`.
 1. Crea un repositorio vacío en GitHub.
 2. Sube el contenido de esta carpeta manteniendo la estructura de carpetas, incluidos `.github/workflows/` y `docs/`.
 3. En la pestaña **Actions**, abre la ejecución `Flutter checks`. Se ejecutará automáticamente al hacer push o abrir un pull request.
-4. Cuando termine con éxito, descarga el artefacto **manigest-release-apk** desde esa ejecución e instala el APK en Android. Si no hay una clave válida configurada en Secrets, el workflow genera una clave nueva y también publica el artefacto privado **manigest-signing-backup**. Descárgalo y guárdalo de forma segura antes de futuras actualizaciones.
+4. Cuando termine con éxito, descarga el artefacto **manigest-release-apk** desde esa ejecución e instala el APK en Android. Si no encuentra una clave válida en Secrets, el workflow crea una clave temporal solo para compilar esa versión. La clave temporal no se publica en los artefactos; por eso, en futuras versiones, tendrás que configurar una clave propia en los Secrets para conservar la firma.
 
 El workflow genera el esqueleto Android solo en el runner porque esta entrega se centra en la fuente Dart. Para desarrollar directamente en tu ordenador, ejecuta el paso `flutter create` anterior.
 
 ### Firma del APK
 
-Si el repositorio no tiene una clave válida configurada, la primera ejecución crea una firma nueva. Descarga y conserva el artefacto `manigest-signing-backup`; contiene el almacén de clave y los datos de firma. Para mantener esa misma firma en las siguientes compilaciones, configura estos GitHub Actions Secrets:
+Si el repositorio no tiene una clave válida configurada, la compilación de lanzamiento utiliza una firma temporal generada por GitHub Actions; la clave privada no se incluye en los artefactos ni en el código del repositorio. Es adecuada para esta instalación inicial, teniendo en cuenta que, si en una ejecución futura se usa otra clave, Android exigirá desinstalar la aplicación anterior antes de instalar la nueva.
+
+Para conservar la firma en actualizaciones, crea tu propia clave y guarda los datos de forma segura en GitHub Actions Secrets:
 
 - `ANDROID_KEYSTORE_BASE64`: archivo JKS codificado en base64.
 - `ANDROID_KEYSTORE_PASSWORD`: contraseña del almacén.
