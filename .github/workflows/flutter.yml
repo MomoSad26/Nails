@@ -40,6 +40,9 @@ jobs:
             flutter create --platforms=android --project-name=manigest .
           fi
 
+      - name: Remove generated Flutter template test
+        run: rm -f test/widget_test.dart
+
       - name: Install dependencies
         run: flutter pub get
 
