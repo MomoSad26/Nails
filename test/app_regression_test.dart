@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:manigest/data/app_database.dart';
@@ -104,25 +103,33 @@ void main() {
   });
 
   testWidgets('navegación: abre Agenda, Citas, Clientes, Catálogo y Ajustes', (tester) async {
-    await tester.pumpWidget(const ManiGestApp());
-    await tester.pumpAndSettle();
+    try {
+      await tester.pumpWidget(const ManiGestApp());
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
 
-    expect(find.text('Hola, Dueña'), findsOneWidget);
+      expect(find.text('Hola, Dueña'), findsOneWidget);
 
-    const sections = <String, String>{
-      'Agenda': 'Consulta las citas por día',
-      'Citas': 'Organiza, actualiza y consulta el historial',
-      'Clientes': 'Ficha, contacto e historial de citas',
-      'Catálogo': 'Servicios, precios y lista para compartir',
-      'Ajustes': 'Personaliza el nombre y la apariencia del negocio.',
-    };
+      const sections = <String, String>{
+        'Agenda': 'Consulta las citas por día',
+        'Citas': 'Organiza, actualiza y consulta el historial',
+        'Clientes': 'Ficha, contacto e historial de citas',
+        'Catálogo': 'Servicios, precios y lista para compartir',
+        'Ajustes': 'Personaliza el nombre y la apariencia del negocio.',
+      };
 
-    for (final entry in sections.entries) {
-      await tester.tap(find.byTooltip(entry.key));
-      await tester.pumpAndSettle();
-      expect(find.text(entry.value), findsOneWidget, reason: 'Debe abrir la sección');
+      for (final entry in sections.entries) {
+        await tester.tap(find.byTooltip(entry.key));
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pump();
+        expect(find.text(entry.value), findsOneWidget, reason: 'Debe abrir la sección');
+      }
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
     }
-
-    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
