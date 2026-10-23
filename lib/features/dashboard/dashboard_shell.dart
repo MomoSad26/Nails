@@ -9,6 +9,7 @@ import '../appointments/appointment_form_page.dart';
 import '../catalog/service_form_page.dart';
 import '../clients/client_form_page.dart';
 import '../messages/message_preview_page.dart';
+import 'navigation_sidebar.dart';
 import '../settings/settings_page.dart';
 import '../../utils/date_utils_es.dart';
 import '../../utils/text_normalizer.dart';
@@ -50,15 +51,6 @@ class _DashboardShellState extends State<DashboardShell> {
   bool _performingUndo = false;
   bool _edgeSwipeActive = false;
   double _edgeSwipeDistance = 0;
-
-  static const _sections = <(String, IconData)>[
-    ('Inicio', Icons.home_rounded),
-    ('Agenda', Icons.calendar_month_rounded),
-    ('Citas', Icons.event_note_rounded),
-    ('Clientes', Icons.people_alt_rounded),
-    ('Catálogo', Icons.spa_rounded),
-    ('Ajustes', Icons.settings_rounded),
-  ];
 
   Color get _accent {
     final raw = _settings['color_acento'] ?? '0xFFB76E79';
@@ -398,41 +390,10 @@ class _DashboardShellState extends State<DashboardShell> {
             onHorizontalDragUpdate: (details) { if (_edgeSwipeActive) _edgeSwipeDistance += details.primaryDelta ?? 0; },
             onHorizontalDragEnd: (details) { if (_edgeSwipeActive && _edgeSwipeDistance > 80) _goBack(); _edgeSwipeActive = false; _edgeSwipeDistance = 0; },
             child: Row(children: [
-            Container(
-              width: 64,
-              decoration: BoxDecoration(color: Colors.white, border: Border(right: BorderSide(color: Colors.pink.shade50))),
-              child: Column(children: [
-                const SizedBox(height: 16),
-                Container(
-                  width: 42, height: 42,
-                  decoration: BoxDecoration(color: _accent.withValues(alpha: 0.13), shape: BoxShape.circle),
-                  child: Icon(Icons.spa_rounded, color: _accent),
-                ),
-                const SizedBox(height: 20),
-                Expanded(child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: _sections.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
-                  itemBuilder: (context, index) {
-                    final item = _sections[index];
-                    final active = _route.kind == 'section' && _route.section == item.$1;
-                    return Tooltip(
-                      message: item.$1,
-                      child: InkWell(
-                        onTap: () => _changeSection(item.$1),
-                        borderRadius: BorderRadius.circular(28),
-                        child: Container(
-                          height: 48, width: 48,
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(color: active ? _accent.withValues(alpha: 0.16) : Colors.transparent, shape: BoxShape.circle),
-                          child: Icon(item.$2, color: active ? _accent : Colors.grey.shade600, size: 23),
-                        ),
-                      ),
-                    );
-                  },
-                )),
-                Padding(padding: const EdgeInsets.only(bottom: 12), child: Text('v1.1', style: TextStyle(fontSize: 10, color: Colors.grey.shade500))),
-              ]),
+            NavigationSidebar(
+              activeSection: _route.kind == 'section' ? _route.section : null,
+              accentColor: _accent,
+              onSelected: _changeSection,
             ),
             Expanded(
               child: Container(

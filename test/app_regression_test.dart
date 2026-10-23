@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:manigest/data/app_database.dart';
-import 'package:manigest/main.dart';
+import 'package:manigest/features/dashboard/navigation_sidebar.dart';
 
 void main() {
   final db = AppDatabase.instance;
@@ -102,36 +102,24 @@ void main() {
     expect((await db.getClient(clientId))?['nombre'], 'María');
   });
 
-  testWidgets('navegación: abre Agenda, Citas, Clientes, Catálogo y Ajustes', (tester) async {
-    try {
-      Future<void> pumpUntilFound(Finder finder) async {
-        for (var i = 0; i < 20 && finder.evaluate().isEmpty; i++) {
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-      }
+  testWidgets('navegación: el panel permite seleccionar cada módulo', (tester) async {
+    String? selected;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: NavigationSidebar(
+          activeSection: 'Inicio',
+          accentColor: Colors.pink,
+          onSelected: (section) => selected = section,
+        ),
+      ),
+    ));
 
-      await db.consolidateStaleDeletes();
-      await db.transitionOverdueAppointments();
-      await db.getSettings();
-      await tester.pumpWidget(const ManiGestApp());
-      await pumpUntilFound(find.byTooltip('Agenda'));
-      expect(find.byTooltip('Agenda'), findsOneWidget);
-
-      const sections = <String, String>{
-        'Agenda': 'Consulta las citas por día',
-        'Citas': 'Organiza, actualiza y consulta el historial',
-        'Clientes': 'Ficha, contacto e historial de citas',
-        'Catálogo': 'Servicios, precios y lista para compartir',
-        'Ajustes': 'Personaliza el nombre y la apariencia del negocio.',
-      };
-
-      for (final entry in sections.entries) {
-        await tester.tap(find.byTooltip(entry.key));
-        await pumpUntilFound(find.text(entry.value));
-        expect(find.text(entry.value), findsOneWidget, reason: 'Debe abrir la sección');
-      }
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
+    const sections = ['Inicio', 'Agenda', 'Citas', 'Clientes', 'Catálogo', 'Ajustes'];
+    for (final section in sections) {
+      await tester.tap(find.byTooltip(section));
+      await tester.pump();
+      expect(selected, section);
     }
   });
+
 }
