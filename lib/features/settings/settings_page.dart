@@ -18,13 +18,13 @@ class _SettingsPageState extends State<SettingsPage> {
   late int _selectedColor;
   bool _saving = false;
   static const _colors = <(String, int)>[
-    ('Rosa empolvado', 0xFFB76E79),
-    ('Malva', 0xFF8F6AA8),
-    ('Coral', 0xFFE47C6E),
-    ('Verde salvia', 0xFF638A79),
-    ('Azul', 0xFF547CA5),
-    ('Ciruela', 0xFF80516B),
-    ('Dorado', 0xFFB38A3E),
+    ('Turquesa', 0xFF62DCEB),
+    ('Dorado claro', 0xFFF3C969),
+    ('Rosa empolvado', 0xFFEF9CB0),
+    ('Malva', 0xFFBDA2E8),
+    ('Coral', 0xFFFF9E8E),
+    ('Verde salvia', 0xFF8CC7AC),
+    ('Azul claro', 0xFF91C4F2),
   ];
 
   @override
@@ -33,7 +33,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _business = TextEditingController(text: widget.initialSettings['nombre_negocio'] ?? 'Mi negocio de uñas');
     _owner = TextEditingController(text: widget.initialSettings['nombre_duena'] ?? 'Dueña');
     _currency = TextEditingController(text: widget.initialSettings['simbolo_moneda'] ?? r'$');
-    _selectedColor = int.tryParse((widget.initialSettings['color_acento'] ?? '0xFFB76E79').replaceFirst('0x', ''), radix: 16) ?? 0xFFB76E79;
+    _selectedColor = int.tryParse((widget.initialSettings['color_acento'] ?? '0xFF62DCEB').replaceFirst('0x', ''), radix: 16) ?? 0xFF62DCEB;
   }
 
   @override
@@ -59,7 +59,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) => ListView(children: [
     const Padding(padding: EdgeInsets.only(bottom: 5), child: Text('Ajustes', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800))),
-    Text('Personaliza el nombre y la apariencia del negocio.', style: TextStyle(color: Colors.grey.shade700)),
+    Text('Personaliza el nombre y la apariencia del negocio.', style: TextStyle(color: const Color(0xFFC0D0E0))),
     const SizedBox(height: 18),
     Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       TextField(controller: _business, decoration: const InputDecoration(labelText: 'Nombre del negocio')),
@@ -75,11 +75,11 @@ class _SettingsPageState extends State<SettingsPage> {
         return Tooltip(message: option.$1, child: InkWell(
           onTap: () => setState(() => _selectedColor = option.$2),
           borderRadius: BorderRadius.circular(22),
-          child: Container(width: 46, height: 46, decoration: BoxDecoration(color: Color(option.$2), shape: BoxShape.circle, border: selected ? Border.all(color: Colors.black87, width: 3) : Border.all(color: Colors.white, width: 2)), child: selected ? const Icon(Icons.check_rounded, color: Colors.white) : null),
+          child: Container(width: 46, height: 46, decoration: BoxDecoration(color: Color(option.$2), shape: BoxShape.circle, border: selected ? Border.all(color: const Color(0xFF071A2B), width: 3) : Border.all(color: const Color(0xFFB7C9DC), width: 2)), child: selected ? const Icon(Icons.check_rounded, color: Colors.white) : null),
         ));
       }).toList()),
       const SizedBox(height: 8),
-      Text(_colors.firstWhere((o) => o.$2 == _selectedColor, orElse: () => ('Color personalizado', _selectedColor)).$1, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+      Text(_colors.firstWhere((o) => o.$2 == _selectedColor, orElse: () => ('Color personalizado', _selectedColor)).$1, style: TextStyle(color: const Color(0xFFC0D0E0), fontSize: 12)),
       const SizedBox(height: 20),
       FilledButton.icon(onPressed: _saving ? null : _save, icon: const Icon(Icons.save_rounded), label: Text(_saving ? 'Guardando…' : 'Guardar ajustes')),
     ]))),
@@ -87,9 +87,9 @@ class _SettingsPageState extends State<SettingsPage> {
     Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('Sobre la app', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
       const SizedBox(height: 8),
-      const Text('ManiGest v1.1 · Datos guardados localmente en el dispositivo.'),
+      const Text('ManiGest v1.2 · Datos guardados localmente en el dispositivo.'),
       const SizedBox(height: 4),
-      Text('No se envían mensajes automáticamente. La app abre WhatsApp con el texto preparado para que tú lo revises y envíes.', style: TextStyle(color: Colors.grey.shade700)),
+      Text('No se envían mensajes automáticamente. La app abre WhatsApp con el texto preparado para que tú lo revises y envíes.', style: TextStyle(color: const Color(0xFFC0D0E0))),
       const SizedBox(height: 8),
       const Text('Las copias de seguridad y la sincronización en la nube no forman parte de esta versión.'),
     ]))),
