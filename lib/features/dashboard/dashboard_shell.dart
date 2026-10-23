@@ -7,6 +7,7 @@ import '../../data/app_database.dart';
 import '../../services/whatsapp_service.dart';
 import '../appointments/appointment_form_page.dart';
 import '../../core/widgets/status_chip.dart';
+import '../../core/widgets/section_header.dart';
 import '../catalog/service_form_page.dart';
 import '../clients/client_form_page.dart';
 import '../messages/message_preview_page.dart';
@@ -269,21 +270,6 @@ class _DashboardShellState extends State<DashboardShell> {
         ]),
       );
 
-  Widget _sectionHeader(String title, {String? subtitle, Widget? trailing}) => Padding(
-        padding: const EdgeInsets.only(bottom: 18),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final titleBlock = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-            if (subtitle != null) ...[const SizedBox(height: 5), Text(subtitle, style: TextStyle(color: Colors.grey.shade700))],
-          ]);
-          if (trailing == null) return titleBlock;
-          if (constraints.maxWidth < 360) {
-            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [titleBlock, const SizedBox(height: 10), Align(alignment: Alignment.centerLeft, child: trailing)]);
-          }
-          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: titleBlock), trailing]);
-        }),
-      );
-
   Widget _bodyCard({required Widget child, EdgeInsets padding = const EdgeInsets.all(16)}) => Card(
         child: Padding(padding: padding, child: child),
       );
@@ -442,7 +428,7 @@ class _DashboardShellState extends State<DashboardShell> {
         }).length;
         final greeting = _settings['nombre_duena'] ?? 'Dueña';
         return ListView(children: [
-          _sectionHeader('Hola, $greeting', subtitle: formatDateWithWeekday(now)),
+          SectionHeader('Hola, $greeting', subtitle: formatDateWithWeekday(now)),
           Text('Hoy tienes $todayCount ${todayCount == 1 ? 'cita' : 'citas'}.', style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 18),
           if (upcoming.isNotEmpty) _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -539,7 +525,7 @@ class _DashboardShellState extends State<DashboardShell> {
         final cellCount = ((firstWeekday - 1 + days) / 7).ceil() * 7;
         final monthTitle = DateFormat('MMMM y', 'es').format(_calendarMonth);
         return ListView(children: [
-          _sectionHeader('Agenda', subtitle: 'Consulta las citas por día'),
+          SectionHeader('Agenda', subtitle: 'Consulta las citas por día'),
           _bodyCard(child: Column(children: [
             Row(children: [
               IconButton(tooltip: 'Mes anterior', onPressed: () => setState(() => _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month - 1)), icon: const Icon(Icons.chevron_left_rounded)),
@@ -639,7 +625,7 @@ class _DashboardShellState extends State<DashboardShell> {
           }
         }).toList();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _sectionHeader('Citas', subtitle: 'Organiza, actualiza y consulta el historial', trailing: _primaryButton('Agregar cita', () => _openAppointmentForm())),
+          SectionHeader('Citas', subtitle: 'Organiza, actualiza y consulta el historial', trailing: _primaryButton('Agregar cita', () => _openAppointmentForm())),
           LayoutBuilder(builder: (context, constraints) {
             if (constraints.maxWidth < 360) {
               return DropdownButtonFormField<int>(
@@ -714,7 +700,7 @@ class _DashboardShellState extends State<DashboardShell> {
         final query = normalizeSearch(_clientSearch);
         final clients = snapshot.data!.where((client) => query.isEmpty || normalizeSearch('${client['nombre']} ${client['telefono'] ?? ''}').contains(query)).toList();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _sectionHeader('Clientes', subtitle: 'Ficha, contacto e historial de citas', trailing: _primaryButton('Agregar clienta', () => _push('client_form', 'Agregar clienta'))),
+          SectionHeader('Clientes', subtitle: 'Ficha, contacto e historial de citas', trailing: _primaryButton('Agregar clienta', () => _push('client_form', 'Agregar clienta'))),
           TextField(
             decoration: const InputDecoration(prefixIcon: Icon(Icons.search_rounded), labelText: 'Buscar por nombre o teléfono', hintText: 'Admite tildes y mayúsculas diferentes'),
             onChanged: (value) => setState(() => _clientSearch = value),
@@ -778,7 +764,7 @@ class _DashboardShellState extends State<DashboardShell> {
         ]);
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if (internal) ...[_pageHeader('Catálogo'), Align(alignment: Alignment.centerLeft, child: catalogActions)]
-          else _sectionHeader('Catálogo', subtitle: 'Servicios, precios y lista para compartir', trailing: catalogActions),
+          else SectionHeader('Catálogo', subtitle: 'Servicios, precios y lista para compartir', trailing: catalogActions),
           Expanded(child: DefaultTabController(length: 2, child: Column(children: [
             const TabBar(tabs: [Tab(text: 'Activos'), Tab(text: 'Inactivos')]),
             Expanded(child: TabBarView(children: [serviceList(active, inactiveList: false), serviceList(inactive, inactiveList: true)])),
