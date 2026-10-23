@@ -19,10 +19,10 @@ class StatusChip extends StatelessWidget {
       _ => status,
     };
     final color = switch (status) {
-      'Terminada' => Colors.green,
-      'Cancelada' => Colors.red,
-      'No_asistio' => Colors.deepOrange,
-      'Pendiente_de_cerrar' => Colors.amber.shade800,
+      'Terminada' => Colors.green.shade300,
+      'Cancelada' => Colors.red.shade300,
+      'No_asistio' => Colors.deepOrange.shade200,
+      'Pendiente_de_cerrar' => Colors.amber.shade300,
       _ => accentColor,
     };
 
