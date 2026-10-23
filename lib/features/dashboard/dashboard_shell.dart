@@ -495,7 +495,7 @@ class _DashboardShellState extends State<DashboardShell> {
       outline: const Color(0xFF55718D),
     );
     return PopScope<Object?>(
-      canPop: _stack.isEmpty && _outgoingRoute == null,
+      canPop: _stack.isEmpty,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _stack.isNotEmpty) _goBack();
       },
