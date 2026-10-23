@@ -207,7 +207,7 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [OutlinedButton.icon(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back_rounded, size: 18), label: const Text('Volver')), const SizedBox(width: 12), Expanded(child: Text(widget.initialId == null ? 'Agregar cita' : widget.resetStatusOnSave ? 'Reprogramar cita' : 'Editar cita', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)))]),
       const SizedBox(height: 10),
-      if (_services.isEmpty) Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(12)), child: Row(children: [const Expanded(child: Text('El catálogo está vacío. Agrega un servicio antes de guardar una cita.')), TextButton(onPressed: () => widget.onOpenCatalog(_draft()), child: const Text('Abrir Catálogo'))])),
+      if (_services.isEmpty) Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFF3B3219), borderRadius: BorderRadius.circular(12)), child: Row(children: [const Expanded(child: Text('El catálogo está vacío. Agrega un servicio antes de guardar una cita.')), TextButton(onPressed: () => widget.onOpenCatalog(_draft()), child: const Text('Abrir Catálogo'))])),
       Expanded(child: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
