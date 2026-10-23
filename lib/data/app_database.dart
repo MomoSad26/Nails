@@ -80,7 +80,7 @@ class AppDatabase {
         final defaults = <String, String>{
           'nombre_negocio': 'Mi negocio de uñas',
           'nombre_duena': 'Dueña',
-          'color_acento': '0xFFB76E79',
+          'color_acento': '0xFF62DCEB',
           'simbolo_moneda': r'$',
         };
         for (final entry in defaults.entries) {
