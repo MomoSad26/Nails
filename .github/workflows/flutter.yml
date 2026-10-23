@@ -112,13 +112,10 @@ jobs:
           path = Path("android/app/build.gradle.kts")
           text = path.read_text(encoding="utf-8")
 
-          properties = '''import java.io.FileInputStream
-          import java.util.Properties
-
-          val manigestSigningProperties = Properties()
+          properties = '''val manigestSigningProperties = java.util.Properties()
           val manigestSigningFile = rootProject.file("key.properties")
           if (manigestSigningFile.exists()) {
-              FileInputStream(manigestSigningFile).use { manigestSigningProperties.load(it) }
+              manigestSigningFile.inputStream().use { manigestSigningProperties.load(it) }
           }
 
           '''
