@@ -122,6 +122,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('menu-Clientes')));
     await tester.pump(const Duration(milliseconds: 230));
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
     expect(find.text('Volver'), findsOneWidget);
 
     await tester.tap(find.text('Volver'));
