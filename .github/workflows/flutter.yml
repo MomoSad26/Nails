@@ -112,16 +112,24 @@ jobs:
           path = Path("android/app/build.gradle.kts")
           text = path.read_text(encoding="utf-8")
 
-          properties = '''val manigestSigningProperties = java.util.Properties()
+          # Kotlin DSL requires the import at the top of the script.
+          if "import java.util.Properties" not in text:
+              text = "import java.util.Properties\n" + text
+          text = text.replace("java.util.Properties()", "Properties()")
+
+          properties = '''val manigestSigningProperties = Properties()
           val manigestSigningFile = rootProject.file("key.properties")
           if (manigestSigningFile.exists()) {
-              manigestSigningFile.inputStream().use { manigestSigningProperties.load(it) }
+              manigestSigningFile.inputStream().use { stream ->
+                  manigestSigningProperties.load(stream)
+              }
           }
 
           '''
           if "manigestSigningProperties" not in text:
               if "android {\n" not in text:
                   raise SystemExit("No se encontró android {} en build.gradle.kts")
+              # Put the properties block after plugins {} and before android {}.
               text = text.replace("android {\n", properties + "android {\n", 1)
 
           signing_config = '''    signingConfigs {
@@ -137,13 +145,49 @@ jobs:
           if 'create("release")' not in text:
               text = text.replace("android {\n", "android {\n" + signing_config, 1)
 
-          text = text.replace(
-              'signingConfig = signingConfigs.getByName("debug")',
-              'signingConfig = signingConfigs.getByName("release")'
-          )
+          release_config = '''getByName("release") {
+                      signingConfig = signingConfigs.getByName("release")
+                  }'''
 
-          if 'signingConfig = signingConfigs.getByName("release")' not in text:
-              raise SystemExit("No se pudo asignar signingConfig de release")
+          # Insert the release signing assignment last inside an existing buildTypes
+          # block so it overrides any generated default debug-signing assignment.
+          build_types_start = text.find("buildTypes {")
+          if build_types_start >= 0:
+              open_brace = text.find("{", build_types_start)
+              depth = 0
+              close_brace = -1
+              for index in range(open_brace, len(text)):
+                  if text[index] == "{":
+                      depth += 1
+                  elif text[index] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          close_brace = index
+                          break
+              if close_brace < 0:
+                  raise SystemExit("No se pudo analizar buildTypes {}")
+              text = text[:close_brace] + "\n        " + release_config + "\n    " + text[close_brace:]
+          else:
+              android_start = text.find("android {")
+              open_brace = text.find("{", android_start)
+              depth = 0
+              close_brace = -1
+              for index in range(open_brace, len(text)):
+                  if text[index] == "{":
+                      depth += 1
+                  elif text[index] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          close_brace = index
+                          break
+              if close_brace < 0:
+                  raise SystemExit("No se pudo analizar android {}")
+              text = text[:close_brace] + '''    buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("release")
+                  }
+              }
+          ''' + text[close_brace:]
 
           path.write_text(text, encoding="utf-8")
           PY
