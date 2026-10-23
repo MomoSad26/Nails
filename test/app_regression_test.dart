@@ -106,7 +106,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(const ManiGestApp());
+    await tester.pumpWidget(const ManiGestApp(enableOverdueTimer: false));
     await tester.pumpAndSettle();
 
     const sections = ['Inicio', 'Agenda', 'Citas', 'Clientes', 'Catálogo', 'Ajustes'];
