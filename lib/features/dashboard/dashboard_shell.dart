@@ -36,7 +36,8 @@ class _PendingUndo {
 }
 
 class DashboardShell extends StatefulWidget {
-  const DashboardShell({super.key});
+  const DashboardShell({super.key, this.enableOverdueTimer = true});
+  final bool enableOverdueTimer;
   @override
   State<DashboardShell> createState() => _DashboardShellState();
 }
@@ -70,10 +71,12 @@ class _DashboardShellState extends State<DashboardShell> {
   void initState() {
     super.initState();
     _initialize();
-    _transitionTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      await _db.transitionOverdueAppointments();
-      if (mounted) setState(() {});
-    });
+    if (widget.enableOverdueTimer) {
+      _transitionTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+        await _db.transitionOverdueAppointments();
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   Future<void> _initialize() async {
