@@ -55,7 +55,6 @@ class _DashboardShellState extends State<DashboardShell> {
   _PendingUndo? _pendingUndo;
   String _clientSearch = '';
   int _appointmentsTab = 0;
-  String _appointmentFilter = 'Todos';
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
   bool _performingUndo = false;
   bool _edgeSwipeActive = false;
@@ -442,7 +441,8 @@ class _DashboardShellState extends State<DashboardShell> {
           _goBack();
         },
       );
-      case 'appointment_detail': return _appointmentDetailPage(route.data['id'] as int);
+      case 'appointment_detail': return _appointmentDetailPage(route.data['id'] as int, history: route.data['history'] == true);
+      case 'appointment_history': return _appointmentHistorySection();
       case 'appointment_form': return AppointmentFormPage(
         key: ValueKey('appointment-form-${route.data['id'] ?? 'new'}-${route.data['date'] ?? ''}-${route.data['clientId'] ?? ''}'),
         db: _db,
@@ -548,117 +548,256 @@ class _DashboardShellState extends State<DashboardShell> {
     );
   }
 
+  Future<List<Map<String, Object?>>> _loadAppointmentsForCurrentTime() async {
+    await _db.transitionOverdueAppointments();
+    return _db.getAllAppointments();
+  }
+
   Widget _homeSection() {
     return FutureBuilder<List<dynamic>>(
-      future: Future.wait([_db.getAllAppointments(), _db.getServices(activeOnly: true)]),
+      future: Future.wait([
+        _loadAppointmentsForCurrentTime(),
+        _db.getServices(activeOnly: true),
+      ]),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final appointments = (snapshot.data![0] as List<Map<String, Object?>>);
-        final services = (snapshot.data![1] as List<Map<String, Object?>>);
+        final appointments = snapshot.data![0] as List<Map<String, Object?>>;
+        final services = snapshot.data![1] as List<Map<String, Object?>>;
         final now = DateTime.now();
-        final todays = appointments.where((a) {
-          final date = DateTime.parse(a['fecha_hora'] as String);
+        final todays = appointments.where((appointment) {
+          final date = DateTime.parse(appointment['fecha_hora'] as String);
           return date.year == now.year && date.month == now.month && date.day == now.day;
-        }).toList()..sort((a, b) => (a['fecha_hora'] as String).compareTo(b['fecha_hora'] as String));
-        final upcoming = appointments.where((a) => a['estado'] == 'Programada' && DateTime.parse(a['fecha_hora'] as String).isAfter(now)).toList()
+        }).toList()
           ..sort((a, b) => (a['fecha_hora'] as String).compareTo(b['fecha_hora'] as String));
-        final pending = appointments.where((a) => a['estado'] == 'Pendiente_de_cerrar').length;
-        final todayCount = todays.length;
-        final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+
+        final weekStart = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1));
         final nextWeekStart = weekStart.add(const Duration(days: 7));
         final endNextWeek = nextWeekStart.add(const Duration(days: 7));
-        final thisWeek = appointments.where((a) {
-          final d = DateTime.parse(a['fecha_hora'] as String);
-          return !d.isBefore(weekStart) && d.isBefore(nextWeekStart) && a['estado'] != 'Cancelada' && a['estado'] != 'No_asistio';
+        final thisWeek = appointments.where((appointment) {
+          final date = DateTime.parse(appointment['fecha_hora'] as String);
+          return !date.isBefore(weekStart) &&
+              date.isBefore(nextWeekStart) &&
+              appointment['estado'] != 'Cancelada' &&
+              appointment['estado'] != 'No_asistio';
         }).length;
-        final nextWeek = appointments.where((a) {
-          final d = DateTime.parse(a['fecha_hora'] as String);
-          return !d.isBefore(nextWeekStart) && d.isBefore(endNextWeek) && a['estado'] != 'Cancelada' && a['estado'] != 'No_asistio';
+        final nextWeek = appointments.where((appointment) {
+          final date = DateTime.parse(appointment['fecha_hora'] as String);
+          return !date.isBefore(nextWeekStart) &&
+              date.isBefore(endNextWeek) &&
+              appointment['estado'] != 'Cancelada' &&
+              appointment['estado'] != 'No_asistio';
         }).length;
+
         final greeting = _settings['nombre_duena'] ?? 'Dueña';
-        return ListView(children: [
-          SectionHeader('Hola, $greeting', subtitle: formatDateWithWeekday(now)),
-          Text('Hoy tienes $todayCount ${todayCount == 1 ? 'cita' : 'citas'}.', style: TextStyle(color: const Color(0xFFC0D0E0))),
-          const SizedBox(height: 18),
-          if (upcoming.isNotEmpty) _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [Icon(Icons.star_rounded, color: _accent), const SizedBox(width: 8), const Text('Próxima cita', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17))]),
-            const SizedBox(height: 12),
-            Text(formatTime(DateTime.parse(upcoming.first['fecha_hora'] as String)), style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: _accent)),
-            const SizedBox(height: 3),
-            Text('${upcoming.first['clienta_nombre']} · ${upcoming.first['servicios_text'] ?? 'Sin servicios'}'),
-            const SizedBox(height: 4),
-            Text(_currency(upcoming.first['precio_total'] as num), style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(onPressed: () => _push('appointment_detail', 'Detalle de cita', data: {'id': upcoming.first['id']}), icon: const Icon(Icons.open_in_new_rounded), label: const Text('Ver detalle')),
-              OutlinedButton.icon(onPressed: () => _prepareAppointmentMessage(upcoming.first), icon: const Icon(Icons.chat_rounded), label: const Text('Notificar por WhatsApp')),
-              if ((upcoming.first['clienta_telefono'] as String?)?.isNotEmpty == true)
-                OutlinedButton.icon(onPressed: () => WhatsAppService.callPhone(upcoming.first['clienta_telefono'] as String), icon: const Icon(Icons.call_rounded), label: const Text('Llamar')),
-            ]),
-          ])) else _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('No tienes citas próximas', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
-            const SizedBox(height: 10), _primaryButton('Agregar cita', () => _openAppointmentForm()),
-          ])),
-          const SizedBox(height: 14),
-          _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Citas de hoy', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            if (todays.isEmpty) _empty('No tienes citas hoy', action: _primaryButton('Agregar cita', () => _openAppointmentForm()))
-            else ...todays.map((a) => _appointmentListTile(a)),
-          ])),
-          if (pending > 0) ...[
+        return ListView(
+          children: [
+            SectionHeader('Hola, $greeting', subtitle: formatDateWithWeekday(now)),
+            Text(
+              'Hoy tienes ${todays.length} ${todays.length == 1 ? 'cita' : 'citas'}.',
+              style: const TextStyle(color: Color(0xFFC0D0E0)),
+            ),
+            const SizedBox(height: 16),
+            _bodyCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Citas de hoy', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  if (todays.isEmpty)
+                    _empty('No tienes citas hoy')
+                  else
+                    ...todays.map((appointment) => _appointmentListTile(appointment, compact: true)),
+                ],
+              ),
+            ),
             const SizedBox(height: 14),
-            _bodyCard(child: Row(children: [Icon(Icons.pending_actions_rounded, color: _accent), const SizedBox(width: 12), Expanded(child: Text('Tienes $pending ${pending == 1 ? 'cita pendiente' : 'citas pendientes'} de cerrar.')), TextButton(onPressed: () { _changeSection('Citas'); setState(() => _appointmentsTab = 1); }, child: const Text('Revisar'))])),
-          ],
-          const SizedBox(height: 14),
-          _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Accesos rápidos', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              _primaryButton('Agregar cita', () => _openAppointmentForm()),
-              OutlinedButton.icon(onPressed: () => _push('client_form', 'Agregar clienta'), icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('Agregar clienta')),
-              OutlinedButton.icon(onPressed: () { final tomorrow = DateTime.now().add(const Duration(days: 1)); _changeSection('Agenda'); setState(() => _calendarMonth = DateTime(tomorrow.year, tomorrow.month)); _push('agenda_day', 'Agenda de mañana', data: {'date': DateTime(tomorrow.year, tomorrow.month, tomorrow.day)}); }, icon: const Icon(Icons.calendar_today_rounded), label: const Text('Ver agenda de mañana')),
-              OutlinedButton.icon(onPressed: _prepareCatalogMessage, icon: const Icon(Icons.share_rounded), label: const Text('Compartir catálogo por WhatsApp')),
-            ]),
-          ])),
-          const SizedBox(height: 14),
-          _bodyCard(child: Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Resumen semanal', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)), const SizedBox(height: 10), Text('Citas esta semana: $thisWeek'), Text('Citas próxima semana: $nextWeek')])),
-            Icon(Icons.date_range_rounded, color: _accent, size: 34),
-          ])),
-          if (services.isEmpty) ...[
+            _bodyCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Accesos rápidos', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: _primaryButton('Agregar cita', () => _openAppointmentForm()),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _push('client_form', 'Agregar clienta'),
+                      icon: const Icon(Icons.person_add_alt_1_rounded),
+                      label: const Text('Agregar clienta'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _changeSection('Citas'),
+                      icon: const Icon(Icons.event_note_rounded),
+                      label: const Text('Citas'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _prepareCatalogMessage(openWhatsApp: true),
+                      icon: const Icon(Icons.share_rounded),
+                      label: const Text('Compartir catálogo'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 14),
-            _bodyCard(child: Row(children: [Icon(Icons.info_outline_rounded, color: _accent), const SizedBox(width: 12), const Expanded(child: Text('Tu catálogo está vacío. Agrega servicios para poder agendar citas.')), TextButton(onPressed: () => _changeSection('Catálogo'), child: const Text('Catálogo'))])),
+            _bodyCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Resumen semanal', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF17334E),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF36516B)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Citas esta semana', style: TextStyle(color: Color(0xFFC0D0E0), fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text('$thisWeek', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF17334E),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF36516B)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Citas próxima semana', style: TextStyle(color: Color(0xFFC0D0E0), fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text('$nextWeek', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (services.isEmpty) ...[
+              const SizedBox(height: 14),
+              _bodyCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline_rounded, color: _accent),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text('Tu catálogo está vacío. Agrega servicios para poder agendar citas.'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: _primaryButton('Abrir Catálogo', () => _changeSection('Catálogo')),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
           ],
-          const SizedBox(height: 16),
-        ]);
+        );
       },
     );
   }
 
-  Widget _appointmentListTile(Map<String, Object?> appointment, {bool compact = false}) {
+  Widget _appointmentListTile(
+    Map<String, Object?> appointment, {
+    bool compact = false,
+    bool allowQuickActions = false,
+    bool fromHistory = false,
+  }) {
     final date = DateTime.parse(appointment['fecha_hora'] as String);
     return InkWell(
-      onTap: () => _push('appointment_detail', 'Detalle de cita', data: {'id': appointment['id']}),
-      onLongPress: () => _showQuickAppointmentMenu(appointment),
+      onTap: () => _push(
+        'appointment_detail',
+        'Detalle de cita',
+        data: {
+          'id': appointment['id'],
+          if (fromHistory) 'history': true,
+        },
+      ),
+      onLongPress: allowQuickActions ? () => _showQuickAppointmentMenu(appointment) : null,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        child: Row(children: [
-          Container(width: 54, padding: const EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: _accent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)), child: Text(formatTime(date), textAlign: TextAlign.center, style: TextStyle(color: _accent, fontWeight: FontWeight.w700))),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${appointment['clienta_nombre'] ?? 'Clienta'}', style: const TextStyle(fontWeight: FontWeight.w700)),
-            if (!compact) Text('${appointment['servicios_text'] ?? 'Sin servicios'} · ${_currency(appointment['precio_total'] as num)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: const Color(0xFFC0D0E0))),
-          ])),
-          const SizedBox(width: 8),
-          StatusChip(
-            status: appointment['estado'] as String? ?? 'Programada',
-            accentColor: _accent,
-          ),
-          const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded, color: Color(0xFFA9BED2)),
-        ]),
+        child: Row(
+          children: [
+            Container(
+              width: 88,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 3),
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                formatTime(date),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _accent, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${appointment['clienta_nombre'] ?? 'Clienta'}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (!compact)
+                    Text(
+                      '${appointment['servicios_text'] ?? 'Sin servicios'} · ${_currency(appointment['precio_total'] as num)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFFC0D0E0)),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            StatusChip(
+              status: appointment['estado'] as String? ?? 'Programada',
+              accentColor: _accent,
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFFA9BED2)),
+          ],
+        ),
       ),
     );
   }
@@ -736,7 +875,7 @@ class _DashboardShellState extends State<DashboardShell> {
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _pageHeader(formatDateLong(day), trailing: _primaryButton('Agregar cita', () => _openAppointmentForm(date: start))),
           Expanded(child: appointments.isEmpty
-              ? _empty('No hay citas para este día', action: _primaryButton('Agregar cita', () => _openAppointmentForm(date: start)))
+              ? _empty('No hay citas para este día')
               : ListView.separated(itemCount: appointments.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (_, index) => _appointmentListTile(appointments[index]))),
         ]);
       },
@@ -745,98 +884,145 @@ class _DashboardShellState extends State<DashboardShell> {
 
   Widget _appointmentsSection() {
     return FutureBuilder<List<Map<String, Object?>>>(
-      future: _db.getAllAppointments(),
+      future: _loadAppointmentsForCurrentTime(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final all = snapshot.data!;
         final now = DateTime.now();
-        List<Map<String, Object?>> selected;
-        if (_appointmentsTab == 0) {
-          selected = all.where((a) => a['estado'] == 'Programada').toList()
-            ..sort((a, b) => (a['fecha_hora'] as String).compareTo(b['fecha_hora'] as String));
-        } else if (_appointmentsTab == 1) {
-          selected = all.where((a) => a['estado'] == 'Pendiente_de_cerrar').toList()
-            ..sort((a, b) => (a['fecha_hora'] as String).compareTo(b['fecha_hora'] as String));
-        } else {
-          selected = all.where((a) => ['Terminada', 'Cancelada', 'No_asistio'].contains(a['estado'])).toList()
-            ..sort((a, b) => ((b['cerrada_en'] ?? b['fecha_hora']) as String).compareTo((a['cerrada_en'] ?? a['fecha_hora']) as String));
-        }
-        selected = selected.where((a) {
-          final d = DateTime.parse(a['fecha_hora'] as String);
-          switch (_appointmentFilter) {
-            case 'Hoy': return d.year == now.year && d.month == now.month && d.day == now.day;
-            case 'Semana':
-              final start = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
-              final end = start.add(const Duration(days: 7));
-              return !d.isBefore(start) && d.isBefore(end);
-            case 'Mensual': return d.year == now.year && d.month == now.month;
-            default: return true;
-          }
-        }).toList();
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SectionHeader('Citas', subtitle: 'Organiza, actualiza y consulta el historial', trailing: _primaryButton('Agregar cita', () => _openAppointmentForm())),
-          LayoutBuilder(builder: (context, constraints) {
-            if (constraints.maxWidth < 360) {
-              return DropdownButtonFormField<int>(
-                value: _appointmentsTab,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Sección de citas'),
-                items: const [
-                  DropdownMenuItem(value: 0, child: Text('Programadas')),
-                  DropdownMenuItem(value: 1, child: Text('Pendientes de cerrar')),
-                  DropdownMenuItem(value: 2, child: Text('Historial')),
-                ],
-                onChanged: (value) => setState(() => _appointmentsTab = value ?? 0),
-              );
-            }
-            return SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 0, label: Text('Programadas')),
-                ButtonSegment(value: 1, label: Text('Pendientes')),
-                ButtonSegment(value: 2, label: Text('Historial')),
+        final programadas = all.where((appointment) {
+          final date = DateTime.parse(appointment['fecha_hora'] as String);
+          return appointment['estado'] == 'Programada' && date.isAfter(now);
+        }).toList()
+          ..sort((a, b) => (a['fecha_hora'] as String).compareTo(b['fecha_hora'] as String));
+        final pendientes = all.where((appointment) => appointment['estado'] == 'Pendiente_de_cerrar').toList()
+          ..sort((a, b) => (a['fecha_hora'] as String).compareTo(b['fecha_hora'] as String));
+        final selected = _appointmentsTab == 0 ? programadas : pendientes;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              'Citas',
+              subtitle: 'Organiza, actualiza y consulta tus citas',
+              trailing: _primaryButton('Agregar cita', () => _openAppointmentForm()),
+            ),
+            SegmentedButton<int>(
+              segments: [
+                ButtonSegment(
+                  value: 0,
+                  label: Text('Programadas\n(${programadas.length})', textAlign: TextAlign.center),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  label: Text('Pendientes por cerrar\n(${pendientes.length})', textAlign: TextAlign.center),
+                ),
               ],
               selected: {_appointmentsTab},
               showSelectedIcon: false,
               onSelectionChanged: (value) => setState(() => _appointmentsTab = value.first),
-            );
-          }),
-          const SizedBox(height: 12),
-          Row(children: [const Text('Filtrar:', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(width: 10), DropdownButton<String>(value: _appointmentFilter, items: const [
-            DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-            DropdownMenuItem(value: 'Hoy', child: Text('Hoy')),
-            DropdownMenuItem(value: 'Semana', child: Text('Semana')),
-            DropdownMenuItem(value: 'Mensual', child: Text('Mensual')),
-          ], onChanged: (value) => setState(() => _appointmentFilter = value ?? 'Todos'))]),
-          Expanded(child: selected.isEmpty
-              ? _empty(_appointmentsTab == 1 ? 'No tienes citas pendientes de cerrar' : _appointmentsTab == 2 ? 'Todavía no hay citas en el historial' : 'No hay citas programadas', action: _appointmentsTab == 2 ? null : _primaryButton('Agregar cita', () => _openAppointmentForm()))
-              : ListView.separated(itemCount: selected.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (_, index) => _appointmentListTile(selected[index]))),
-          const SizedBox(height: 4),
-          Text('Mantén pulsada una cita para abrir el menú rápido.', style: TextStyle(fontSize: 11, color: const Color(0xFFA9BED2))),
-        ]);
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _push('appointment_history', 'Historial'),
+                icon: const Icon(Icons.history_rounded, size: 18),
+                label: const Text('Historial'),
+              ),
+            ),
+            Expanded(
+              child: selected.isEmpty
+                  ? _empty(_appointmentsTab == 1
+                      ? 'No tienes citas pendientes de cerrar'
+                      : 'No hay citas programadas')
+                  : ListView.separated(
+                      itemCount: selected.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, index) => _appointmentListTile(
+                        selected[index],
+                        allowQuickActions: true,
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Mantén pulsada una cita durante medio segundo para abrir el menú rápido.',
+              style: TextStyle(fontSize: 11, color: Color(0xFFA9BED2)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _appointmentHistorySection() {
+    return FutureBuilder<List<Map<String, Object?>>>(
+      future: _loadAppointmentsForCurrentTime(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final closed = snapshot.data!
+            .where((appointment) => const {'Terminada', 'Cancelada', 'No_asistio'}.contains(appointment['estado']))
+            .toList()
+          ..sort((a, b) {
+            final dateA = (a['cerrada_en'] ?? a['fecha_hora']) as String;
+            final dateB = (b['cerrada_en'] ?? b['fecha_hora']) as String;
+            return dateB.compareTo(dateA);
+          });
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _pageHeader('Historial'),
+            Expanded(
+              child: closed.isEmpty
+                  ? _empty('Todavía no hay citas en el historial')
+                  : ListView.separated(
+                      itemCount: closed.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, index) => _appointmentListTile(
+                        closed[index],
+                        fromHistory: true,
+                      ),
+                    ),
+            ),
+          ],
+        );
       },
     );
   }
 
   Future<void> _showQuickAppointmentMenu(Map<String, Object?> appointment) async {
-    final action = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('Acciones rápidas'),
-      content: Text('${appointment['clienta_nombre']} · ${formatDateCompact(DateTime.parse(appointment['fecha_hora'] as String))}'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, 'Terminada'), child: const Text('Terminada')),
-        TextButton(onPressed: () => Navigator.pop(dialogContext, 'Posponer'), child: const Text('Posponer')),
-        TextButton(onPressed: () => Navigator.pop(dialogContext, 'Eliminar'), child: const Text('Eliminar', style: TextStyle(color: Colors.red))),
-        TextButton(onPressed: () => Navigator.pop(dialogContext, 'Cancelar'), child: const Text('Cancelar cita')),
-        TextButton(onPressed: () => Navigator.pop(dialogContext, 'No_asistio'), child: const Text('No asistió')),
-      ],
-    ));
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Acciones rápidas'),
+        content: Text(
+          '${appointment['clienta_nombre']} · ${formatDateCompact(DateTime.parse(appointment['fecha_hora'] as String))}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, 'Terminar'), child: const Text('Terminar')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, 'Cancelar'), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, 'Reprogramar'), child: const Text('Reprogramar')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, 'Eliminar'), child: const Text('Eliminar', style: TextStyle(color: Color(0xFFFF9292)))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, 'No asistió'), child: const Text('No asistió')),
+        ],
+      ),
+    );
     if (action == null) return;
     final id = appointment['id'] as int;
     if (action == 'Eliminar') {
       await _deleteAppointment(id);
-    } else if (action == 'Posponer') {
+    } else if (action == 'Reprogramar') {
       _openAppointmentForm(id: id, reprogram: true);
     } else {
-      await _db.changeAppointmentStatus(id, action == 'Cancelar' ? 'Cancelada' : action);
+      final status = switch (action) {
+        'Terminar' => 'Terminada',
+        'Cancelar' => 'Cancelada',
+        'No asistió' => 'No_asistio',
+        _ => null,
+      };
+      if (status == null) return;
+      await _db.changeAppointmentStatus(id, status);
       await _refresh();
     }
   }
@@ -1012,54 +1198,142 @@ class _DashboardShellState extends State<DashboardShell> {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 19, color: _accent), const SizedBox(width: 10), SizedBox(width: 125, child: Text(label, style: TextStyle(color: const Color(0xFFC0D0E0)))), Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))) ]),
       );
 
-  Widget _appointmentDetailPage(int id) {
+  Widget _appointmentDetailPage(int id, {bool history = false}) {
     return FutureBuilder<Map<String, Object?>?>(
       future: _db.getAppointment(id),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final appointment = snapshot.data;
-        if (appointment == null) return Column(children: [_pageHeader('Detalle de cita'), const Expanded(child: Center(child: Text('La cita ya no está disponible.')))]);
+        if (appointment == null) {
+          return Column(
+            children: [
+              _pageHeader('Detalle de cita'),
+              const Expanded(child: Center(child: Text('La cita ya no está disponible.'))),
+            ],
+          );
+        }
         final date = DateTime.parse(appointment['fecha_hora'] as String);
         final services = (appointment['servicios'] as List<Map<String, Object?>>?) ?? [];
-        final phone = appointment['clienta_telefono'] as String?;
         final status = appointment['estado'] as String;
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _pageHeader('Detalle de cita', trailing: PopupMenuButton<String>(onSelected: (value) {
-            if (value == 'edit') _openAppointmentForm(id: id);
-            if (value == 'delete') _deleteAppointment(id);
-          }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar cita')), PopupMenuItem(value: 'delete', child: Text('Eliminar cita'))])),
-          Expanded(child: ListView(children: [
-            _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [Expanded(child: Text(appointment['clienta_nombre'] as String, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800))), StatusChip(status: status, accentColor: _accent)]),
-              const SizedBox(height: 14),
-              _detailLine(Icons.calendar_today_rounded, 'Fecha', formatDateLong(date)),
-              _detailLine(Icons.schedule_rounded, 'Hora', formatTime(date)),
-              _detailLine(Icons.payments_outlined, 'Precio total', _currency(appointment['precio_total'] as num)),
-              _detailLine(Icons.notes_rounded, 'Nota', (appointment['nota'] as String?)?.isNotEmpty == true ? appointment['nota'] as String : 'Sin notas'),
-              const Divider(height: 24),
-              const Text('Servicios', style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              if (services.isEmpty) const Text('No hay servicios registrados')
-              else ...services.map((service) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [Expanded(child: Text(service['nombre_snapshot'] as String)), Text(_currency(service['precio_snapshot'] as num), style: const TextStyle(fontWeight: FontWeight.w600))]))),
-            ])),
-            const SizedBox(height: 12),
-            _bodyCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Acciones', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                OutlinedButton.icon(onPressed: () => _openAppointmentForm(id: id), icon: const Icon(Icons.edit_rounded), label: const Text('Editar cita')),
-                OutlinedButton.icon(onPressed: () => _openAppointmentForm(id: id, reprogram: true), icon: const Icon(Icons.event_repeat_rounded), label: const Text('Reprogramar')),
-                if (status != 'Terminada') _primaryButton('Terminar cita', () async { await _db.changeAppointmentStatus(id, 'Terminada'); await _refresh(); }),
-                if (status != 'Cancelada') OutlinedButton.icon(onPressed: () async { await _db.changeAppointmentStatus(id, 'Cancelada'); await _refresh(); }, icon: const Icon(Icons.event_busy_rounded), label: const Text('Cancelar cita')),
-                if (status != 'No_asistio') OutlinedButton.icon(onPressed: () async { await _db.changeAppointmentStatus(id, 'No_asistio'); await _refresh(); }, icon: const Icon(Icons.person_off_rounded), label: const Text('No asistió')),
-                OutlinedButton.icon(onPressed: () => _deleteAppointment(id), icon: const Icon(Icons.delete_outline_rounded, color: Colors.red), label: const Text('Eliminar cita')),
-                OutlinedButton.icon(onPressed: () => _prepareAppointmentMessage(appointment), icon: const Icon(Icons.chat_rounded), label: const Text('Notificar por WhatsApp')),
-                if (phone?.isNotEmpty == true) OutlinedButton.icon(onPressed: () => WhatsAppService.callPhone(phone!), icon: const Icon(Icons.call_rounded), label: const Text('Llamar')),
-              ]),
-            ])),
-            const SizedBox(height: 20),
-          ])),
-        ]);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _pageHeader('Detalle de cita'),
+            Expanded(
+              child: ListView(
+                children: [
+                  _bodyCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                appointment['clienta_nombre'] as String,
+                                style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            StatusChip(status: status, accentColor: _accent),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        _detailLine(Icons.calendar_today_rounded, 'Fecha', formatDateLong(date)),
+                        _detailLine(Icons.schedule_rounded, 'Hora', formatTime(date)),
+                        _detailLine(Icons.payments_outlined, 'Precio total', _currency(appointment['precio_total'] as num)),
+                        _detailLine(
+                          Icons.notes_rounded,
+                          'Nota',
+                          (appointment['nota'] as String?)?.isNotEmpty == true
+                              ? appointment['nota'] as String
+                              : 'Sin notas',
+                        ),
+                        const Divider(height: 24),
+                        const Text('Servicios', style: TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        if (services.isEmpty)
+                          const Text('No hay servicios registrados')
+                        else
+                          ...services.map((service) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: Text(service['nombre_snapshot'] as String)),
+                                    Text(
+                                      _currency(service['precio_snapshot'] as num),
+                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              )),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _bodyCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Acciones', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 12),
+                        if (history)
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _deleteAppointment(id),
+                              icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF9292)),
+                              label: const Text('Eliminar'),
+                            ),
+                          )
+                        else
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (status != 'Terminada')
+                                _primaryButton('Terminar', () async {
+                                  await _db.changeAppointmentStatus(id, 'Terminada');
+                                  await _refresh();
+                                }, icon: Icons.check_circle_outline_rounded),
+                              if (status != 'Cancelada')
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    await _db.changeAppointmentStatus(id, 'Cancelada');
+                                    await _refresh();
+                                  },
+                                  icon: const Icon(Icons.event_busy_rounded),
+                                  label: const Text('Cancelar'),
+                                ),
+                              OutlinedButton.icon(
+                                onPressed: () => _openAppointmentForm(id: id, reprogram: true),
+                                icon: const Icon(Icons.event_repeat_rounded),
+                                label: const Text('Reprogramar'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => _deleteAppointment(id),
+                                icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF9292)),
+                                label: const Text('Eliminar'),
+                              ),
+                              if (status != 'No_asistio')
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    await _db.changeAppointmentStatus(id, 'No_asistio');
+                                    await _refresh();
+                                  },
+                                  icon: const Icon(Icons.person_off_rounded),
+                                  label: const Text('No asistió'),
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -1129,16 +1403,31 @@ class _DashboardShellState extends State<DashboardShell> {
     _push('whatsapp_preview', 'Vista previa de WhatsApp', data: {'message': message, 'phone': phone, 'title': 'Notificación de cita'});
   }
 
-  Future<void> _prepareCatalogMessage() async {
+  Future<void> _prepareCatalogMessage({bool openWhatsApp = false}) async {
     final services = await _db.getServices(activeOnly: true);
     if (services.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Agrega al menos un servicio activo para compartir el catálogo.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Agrega al menos un servicio activo para compartir el catálogo.')),
+        );
+      }
       return;
     }
     final lines = services.map((service) => '• ${service['nombre']} – ${_currency(service['precio'] as num)}').join('\n');
     final businessName = _settings['nombre_negocio'] ?? 'Mi negocio de uñas';
+    final message = 'Catálogo de servicios – $businessName\n\n$lines';
+    if (openWhatsApp) {
+      final opened = await WhatsAppService.openMessage(phone: null, message: message);
+      if (!mounted) return;
+      if (!opened) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo abrir WhatsApp. Comprueba que esté instalado o usa WhatsApp Web.')),
+        );
+      }
+      return;
+    }
     _push('whatsapp_preview', 'Compartir catálogo', data: {
-      'message': 'Catálogo de servicios – $businessName\n\n$lines',
+      'message': message,
       'phone': null,
       'title': 'Catálogo de servicios',
     });
