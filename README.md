@@ -1,6 +1,6 @@
 # ManiGest — Gestión de negocio de uñas
 
-Aplicación Flutter móvil, offline-first y en español para gestionar clientas, citas, servicios, agenda y mensajes preelaborados de WhatsApp. Este proyecto incorpora las reglas funcionales v1.0, las aclaraciones v1.1 y el modelo de navegación v1.2.
+Aplicación Flutter móvil, offline-first y en español para gestionar clientas, citas, servicios, agenda y mensajes preelaborados de WhatsApp. Este proyecto incorpora las reglas funcionales v1.0, las aclaraciones v1.1, la navegación v1.2 y los cambios de Inicio, Citas y formato horario v1.3.
 
 ## Lo principal que incluye
 
@@ -15,7 +15,7 @@ Aplicación Flutter móvil, offline-first y en español para gestionar clientas,
 - Precio por servicio guardado como snapshot en cada cita y total de cita editable.
 - Mensajes de WhatsApp preelaborados, editables y enviados manualmente desde WhatsApp; sin envío automático.
 - Ajustes para el nombre del negocio, nombre de la dueña, color de acento y símbolo de moneda.
-- GitHub Actions para analizar el proyecto, correr pruebas y generar un APK de lanzamiento firmado.
+- GitHub Actions con un único job por actualización: analiza, ejecuta las pruebas, compila un único APK firmado y publica el artefacto y el enlace de descarga en Releases.
 
 ## Requisitos
 
@@ -54,8 +54,10 @@ El APK se genera en `build/app/outputs/flutter-apk/app-debug.apk`.
 
 1. Crea un repositorio vacío en GitHub.
 2. Sube el contenido de esta carpeta manteniendo la estructura de carpetas, incluidos `.github/workflows/` y `docs/`.
-3. En la pestaña **Actions**, abre la ejecución `Flutter checks`. Se ejecutará automáticamente al hacer push o abrir un pull request.
-4. Cuando termine con éxito, descarga el artefacto **manigest-release-apk** desde esa ejecución e instala el APK en Android. Si no encuentra una clave válida en Secrets, el workflow crea una clave temporal solo para compilar esa versión. La clave temporal no se publica en los artefactos; por eso, en futuras versiones, tendrás que configurar una clave propia en los Secrets para conservar la firma.
+3. En la pestaña **Actions**, abre la única ejecución `Compilar APK Android`. Se ejecuta una vez por commit de código en `main` o al lanzarla manualmente; no crea una ejecución de compilación separada por pull request.
+4. Cuando termine con éxito, descarga el artefacto **ManiGest-APK** o usa el enlace fijo https://github.com/MomoSad26/Nails/releases/latest/download/ManiGest.apk.
+
+Si no hay una clave válida configurada en Secrets, la ejecución usa una firma temporal. Para instalar futuras versiones encima de la app sin desinstalarla, configura estos cuatro GitHub Actions Secrets con una clave privada propia: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`. No subas el archivo JKS ni las contraseñas al repositorio.
 
 El workflow genera el esqueleto Android solo en el runner porque esta entrega se centra en la fuente Dart. Para desarrollar directamente en tu ordenador, ejecuta el paso `flutter create` anterior.
 
@@ -81,6 +83,7 @@ manigest-app/
 │   ├── DECISIONES_TECNICAS.md
 │   ├── ENMIENDA_V1_1.md
 │   ├── ENMIENDA_V1_2.md
+│   ├── ENMIENDA_V1_3.md
 │   ├── ESPECIFICACION_FUNCIONAL_V1_0.md
 │   └── PRUEBAS_MANUALES.md
 ├── lib/
