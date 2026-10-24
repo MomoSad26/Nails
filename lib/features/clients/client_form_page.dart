@@ -158,7 +158,10 @@ class _ClientFormPageState extends State<ClientFormPage> {
                 ),
               ),
               validator: (value) => _phone.text.trim().isNotEmpty &&
-                  (value == null || !RegExp(r'^\+[0-9]{1,4}
+                  (value == null || !RegExp(r'^\+[0-9]{1,4}$').hasMatch(value.trim()))
+                  ? 'Ej. +53'
+                  : null,
+            )),
             const SizedBox(width: 8),
             Expanded(child: TextFormField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Número de teléfono', hintText: '5 1234567'), onChanged: (value) => setState(() {
               final hasPhone = value.trim().isNotEmpty;
@@ -181,31 +184,6 @@ class _ClientFormPageState extends State<ClientFormPage> {
                 _notifyWhatsapp = value;
                 _notifyWhatsappManuallySet = true;
               })),
-          const SizedBox(height: 12),
-          FilledButton.icon(onPressed: _saving ? null : _submit, icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_rounded), label: Text(_saving ? 'Guardando…' : 'Guardar clienta')),
-        ]),
-      )),
-    ]);
-  }
-
-  Widget _detailLineLocal(IconData icon, String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(children: [Icon(icon, size: 19, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 10), Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)), Expanded(child: Text(value))]),
-      );
-}
-).hasMatch(value.trim()))
-                  ? 'Ej. +53'
-                  : null,
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: TextFormField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Número de teléfono', hintText: '5 1234567'), onChanged: (_) => setState(() { if (_phone.text.trim().isEmpty) _notifyWhatsapp = false; }))),
-          ]),
-          const SizedBox(height: 12),
-          TextFormField(controller: _note, minLines: 3, maxLines: 6, decoration: const InputDecoration(labelText: 'Nota', alignLabelWithHint: true, hintText: 'Preferencias, alergias a productos, observaciones…')),
-          const SizedBox(height: 12),
-          if (_client != null) _detailLineLocal(Icons.event_available_rounded, 'Fecha de registro', formatDateLong(DateTime.parse(_client!['fecha_registro'] as String))),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Clienta activa'), subtitle: const Text('Las clientas inactivas se conservan en el historial.'), value: _active, onChanged: (value) => setState(() => _active = value)),
-          if (_phone.text.trim().isNotEmpty) SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Notificar por WhatsApp'), subtitle: const Text('La app prepara el mensaje; el envío se confirma en WhatsApp.'), value: _notifyWhatsapp, onChanged: (value) => setState(() => _notifyWhatsapp = value)),
           const SizedBox(height: 12),
           FilledButton.icon(onPressed: _saving ? null : _submit, icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_rounded), label: Text(_saving ? 'Guardando…' : 'Guardar clienta')),
         ]),
