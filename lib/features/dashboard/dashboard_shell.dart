@@ -1338,37 +1338,6 @@ class _DashboardShellState extends State<DashboardShell> {
     );
   }
 
-  Future<void> _prepareAppointmentMessage(Map<String, Object?> appointment) async {
-    final phone = appointment['clienta_telefono'] as String?;
-    final clientId = appointment['clienta_id'] as int;
-    final name = appointment['clienta_nombre'] as String? ?? 'clienta';
-    if (phone == null || phone.trim().isEmpty) {
-      final addPhone = await _askYesNo(
-        title: 'Falta el número de contacto',
-        message: 'Esta clienta no tiene número de WhatsApp. ¿Deseas agregar un número de contacto?',
-        yesText: 'Sí, agregar',
-      );
-      if (addPhone) {
-        final client = await _db.getClient(clientId);
-        if (client != null) _push('client_form', 'Editar clienta', data: {'id': clientId, 'client': client});
-      }
-      return;
-    }
-    if ((appointment['clienta_notificar_whatsapp'] as int? ?? 0) != 1) {
-      final enableNotifications = await _confirm(
-        title: 'Notificaciones desactivadas',
-        message: 'Las notificaciones están desactivadas para esta clienta. ¿Deseas activarlas para preparar el mensaje?',
-      );
-      if (!enableNotifications) return;
-      await _db.setClientWhatsAppEnabled(clientId, true);
-      await _refresh();
-    }
-    final date = DateTime.parse(appointment['fecha_hora'] as String);
-    final relative = relativeAppointmentDate(date, DateTime.now());
-    final message = 'Hola $name, recuerde que $relative tiene cita conmigo a las ${formatTime(date)}. Por favor, si se le presenta algún problema me avisa con antelación. Gracias.';
-    _push('whatsapp_preview', 'Vista previa de WhatsApp', data: {'message': message, 'phone': phone, 'title': 'Notificación de cita'});
-  }
-
   Future<void> _prepareClientMessage(Map<String, Object?> client, List<Map<String, Object?>> history) async {
     final phone = client['telefono'] as String?;
     final clientId = client['id'] as int;

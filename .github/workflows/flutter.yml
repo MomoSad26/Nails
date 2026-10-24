@@ -40,6 +40,9 @@ jobs:
             flutter create --platforms=android --project-name=manigest --no-pub .
           fi
 
+      - name: Eliminar la prueba de plantilla generada por Flutter
+        run: rm -f test/widget_test.dart
+
       - name: Instalar dependencias
         run: flutter pub get
 
