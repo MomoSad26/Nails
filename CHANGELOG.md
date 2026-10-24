@@ -1,5 +1,18 @@
 # Cambios
 
+## 1.3.0 — Inicio final, Citas y formato horario
+
+- Inicio queda con saludo, fecha, número de citas de hoy, lista compacta ordenada por hora, cuatro accesos rápidos verticales, contadores semanales y aviso de catálogo vacío condicional.
+- Se eliminan de Inicio la próxima cita destacada y el aviso de citas pendientes por cerrar.
+- Citas usa solo el selector exclusivo Programadas / Pendientes por cerrar, ambos con contador; Historial se abre en una ventana aparte.
+- Historial muestra las citas cerradas más recientes primero y su detalle solo permite eliminar.
+- Las citas vencidas pasan a Pendientes por cerrar; las listas de Programadas y Pendientes se ordenan por hora, y el menú rápido usa Terminar / Cancelar / Reprogramar / Eliminar / No asistió.
+- Agenda ya no duplica Agregar cita cuando un día está vacío.
+- El selector de clienta se integra en un solo campo de búsqueda/selección, con filtrado tolerante y opción Crear nueva clienta en el mismo panel.
+- Todas las horas visibles pasan a 12 horas con AM/PM. Los selectores se abren con la hora actual y las fechas con la fecha actual, excepto el día seleccionado desde Agenda.
+- Actions se organiza como un único job de compilación por push a main o ejecución manual; el build produce un APK y publica el artefacto y el enlace de Releases.
+
+
 ## 1.2.0 — Pantalla de monedas y ventanas apiladas
 
 - Se elimina la barra lateral fija y se añade una pantalla raíz con seis monedas circulares, icono y nombre.

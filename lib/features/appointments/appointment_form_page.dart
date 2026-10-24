@@ -39,6 +39,7 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
   bool _loading = true;
   bool _saving = false;
   String _clientQuery = '';
+  bool _clientSelectorOpen = false;
 
   @override
   void initState() {
@@ -59,8 +60,8 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
     final clients = loaded[0] as List<Map<String, Object?>>;
     final services = loaded[1] as List<Map<String, Object?>>;
     var clientId = widget.initialClientId;
-    DateTime? date = widget.initialDate;
-    TimeOfDay? time;
+    DateTime? date = widget.initialDate ?? DateTime.now();
+    TimeOfDay? time = TimeOfDay.now();
     final selected = <int>{};
     var note = '';
     var total = 0.0;
@@ -69,7 +70,7 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
       final draft = widget.initialDraft!;
       clientId = draft['clientId'] as int? ?? clientId;
       date = draft['date'] as DateTime? ?? date;
-      time = draft['time'] as TimeOfDay?;
+      time = draft['time'] as TimeOfDay? ?? time;
       selected.addAll((draft['services'] as List<dynamic>? ?? []).whereType<int>());
       note = draft['note'] as String? ?? '';
       total = (draft['total'] as num?)?.toDouble() ?? 0;
@@ -102,6 +103,9 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
       _clients = clients;
       _services = services;
       _clientId = clientId;
+      _clientQuery = '';
+      _clientSelectorOpen = false;
+      _searchClient.text = _labelForSelectedClient(clients, clientId);
       _selectedDate = date;
       _selectedTime = time;
       _selectedServices.addAll(selected);
@@ -143,9 +147,11 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    final launchedFromAgenda = widget.initialDate != null && widget.initialId == null;
+    final initialDate = launchedFromAgenda ? (_selectedDate ?? now) : now;
     final selected = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? now,
+      initialDate: initialDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
       locale: const Locale('es'),
@@ -157,11 +163,137 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
   Future<void> _pickTime() async {
     final selected = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
-      helpText: 'Selecciona la hora',
-      builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!),
+      initialTime: TimeOfDay.now(),
+      helpText: 'Selecciona la hora (AM/PM)',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
+      ),
     );
     if (selected != null) setState(() => _selectedTime = selected);
+  }
+
+  String _labelForSelectedClient(List<Map<String, Object?>> clients, int? id) {
+    if (id == null) return '';
+    for (final client in clients) {
+      if (client['id'] == id) {
+        final inactive = (client['activa'] as int? ?? 1) == 0;
+        return '${client['nombre']}${inactive ? ' · Inactiva' : ''}';
+      }
+    }
+    return '';
+  }
+
+  void _openClientSelector() {
+    if (_clientSelectorOpen) return;
+    setState(() {
+      _clientSelectorOpen = true;
+      _clientQuery = '';
+      _searchClient.clear();
+    });
+  }
+
+  void _closeClientSelector() {
+    setState(() {
+      _clientSelectorOpen = false;
+      _clientQuery = '';
+      _searchClient.text = _labelForSelectedClient(_clients, _clientId);
+    });
+  }
+
+  void _selectClient(Map<String, Object?> client) {
+    setState(() {
+      _clientId = client['id'] as int;
+      _searchClient.text = _labelForSelectedClient(_clients, _clientId);
+      _clientQuery = '';
+      _clientSelectorOpen = false;
+    });
+  }
+
+  Widget _clientSelector() {
+    final query = normalizeSearch(_clientQuery);
+    final filtered = _clients.where((client) {
+      final searchable = normalizeSearch('${client['nombre']} ${client['telefono'] ?? ''}');
+      return query.isEmpty || searchable.contains(query);
+    }).toList();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: const Color(0xFF36516B)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _searchClient,
+            readOnly: !_clientSelectorOpen,
+            onTap: _openClientSelector,
+            onChanged: (value) => setState(() {
+              _clientSelectorOpen = true;
+              _clientQuery = value;
+            }),
+            decoration: InputDecoration(
+              labelText: 'Clienta *',
+              prefixIcon: const Icon(Icons.person_search_rounded),
+              suffixIcon: IconButton(
+                tooltip: _clientSelectorOpen ? 'Cerrar lista' : 'Mostrar clientas',
+                onPressed: _clientSelectorOpen ? _closeClientSelector : _openClientSelector,
+                icon: Icon(_clientSelectorOpen ? Icons.expand_less_rounded : Icons.expand_more_rounded),
+              ),
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            ),
+          ),
+          if (_clientSelectorOpen) ...[
+            const Divider(height: 1, color: Color(0xFF36516B)),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: [
+                  if (_clients.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Text('No hay clientas'),
+                    )
+                  else if (filtered.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Text('No se encontraron clientas'),
+                    )
+                  else
+                    ...filtered.map((client) {
+                      final inactive = (client['activa'] as int? ?? 1) == 0;
+                      final name = '${client['nombre']}${inactive ? ' · Inactiva' : ''}';
+                      final phone = (client['telefono'] as String?)?.trim() ?? '';
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.person_outline_rounded),
+                        title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: phone.isEmpty ? null : Text(phone),
+                        onTap: () => _selectClient(client),
+                      );
+                    }),
+                  const Divider(height: 1, color: Color(0xFF36516B)),
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.person_add_alt_1_rounded),
+                    title: const Text('Crear nueva clienta'),
+                    onTap: () => widget.onCreateClient(_draft()),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -211,21 +343,11 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
       Expanded(child: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
-          TextField(controller: _searchClient, decoration: const InputDecoration(labelText: 'Buscar clienta', prefixIcon: Icon(Icons.search_rounded)), onChanged: (value) => setState(() => _clientQuery = value)),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            value: _clientId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Clienta *'),
-            items: _clients.where((client) => normalizeSearch('${client['nombre']} ${client['telefono'] ?? ''}').contains(normalizeSearch(_clientQuery))).map((client) => DropdownMenuItem<int>(value: client['id'] as int, child: Text('${client['nombre']}${(client['activa'] as int? ?? 1) == 0 ? ' · Inactiva' : ''}', overflow: TextOverflow.ellipsis))).toList(),
-            onChanged: (value) => setState(() => _clientId = value),
-            validator: (value) => value == null ? 'Selecciona una clienta.' : null,
-          ),
-          Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => widget.onCreateClient(_draft()), icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('Crear nueva clienta'))),
+          _clientSelector(),
           const SizedBox(height: 8),
           LayoutBuilder(builder: (context, constraints) {
             final dateButton = OutlinedButton.icon(onPressed: _pickDate, icon: const Icon(Icons.calendar_today_rounded), label: Text(_selectedDate == null ? 'Elegir fecha *' : formatDateCompact(_selectedDate!)));
-            final timeButton = OutlinedButton.icon(onPressed: _pickTime, icon: const Icon(Icons.schedule_rounded), label: Text(_selectedTime == null ? 'Elegir hora *' : '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}'));
+            final timeButton = OutlinedButton.icon(onPressed: _pickTime, icon: const Icon(Icons.schedule_rounded), label: Text(_selectedTime == null ? 'Elegir hora *' : formatTimeParts(_selectedTime!.hour, _selectedTime!.minute)));
             if (constraints.maxWidth < 360) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [dateButton, const SizedBox(height: 8), timeButton]);
             return Row(children: [Expanded(child: dateButton), const SizedBox(width: 8), Expanded(child: timeButton)]);
           }),

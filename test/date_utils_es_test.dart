@@ -7,6 +7,15 @@ void main() {
     await initializeDateFormatting('es');
   });
 
+  group('formatTime', () {
+    test('uses 12-hour time with explicit AM/PM', () {
+      expect(formatTime(DateTime(2026, 10, 23, 0, 5)), '12:05 AM');
+      expect(formatTime(DateTime(2026, 10, 23, 9, 7)), '9:07 AM');
+      expect(formatTime(DateTime(2026, 10, 23, 12, 0)), '12:00 PM');
+      expect(formatTime(DateTime(2026, 10, 23, 15, 45)), '3:45 PM');
+    });
+  });
+
   group('relativeAppointmentDate', () {
     test('uses mañana only when the appointment is the next calendar day', () {
       expect(

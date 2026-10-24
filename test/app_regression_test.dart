@@ -102,6 +102,45 @@ void main() {
     expect((await db.getClient(clientId))?['nombre'], 'María');
   });
 
+  testWidgets('Inicio muestra citas compactas, cuatro accesos y no muestra los bloques eliminados', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const ManiGestApp(enableOverdueTimer: false));
+
+    for (var attempt = 0;
+        attempt < 20 && find.byKey(const ValueKey('menu-Inicio')).evaluate().isEmpty;
+        attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await tester.tap(find.byKey(const ValueKey('menu-Inicio')));
+    for (var attempt = 0;
+        attempt < 20 && find.text('Accesos rápidos').evaluate().isEmpty;
+        attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('Citas de hoy'), findsOneWidget);
+    expect(find.text('No tienes citas hoy'), findsOneWidget);
+    expect(find.text('Accesos rápidos'), findsOneWidget);
+    expect(find.text('Agregar cita'), findsOneWidget);
+    expect(find.text('Agregar clienta'), findsOneWidget);
+    expect(find.text('Citas'), findsOneWidget);
+    expect(find.text('Compartir catálogo'), findsOneWidget);
+    expect(find.text('Resumen semanal'), findsOneWidget);
+    expect(find.text('Próxima cita'), findsNothing);
+    expect(find.textContaining('pendiente de cerrar'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('navegación: la pantalla de monedas abre un menú y Volver regresa a la raíz', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
