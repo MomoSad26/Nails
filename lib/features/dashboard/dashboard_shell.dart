@@ -1222,7 +1222,10 @@ class _DashboardShellState extends State<DashboardShell> {
         final history = snapshot.data![1] as List<Map<String, Object?>>;
         final phone = client['telefono'] as String?;
         final active = (client['activa'] as int? ?? 1) == 1;
-        final notify = (client['notificar_whatsapp'] as int? ?? 0) == 1;
+        final hasPhone = phone?.trim().isNotEmpty == true;
+        final notify = hasPhone &&
+            ((client['notificar_whatsapp_manual'] as int? ?? 0) != 1 ||
+                (client['notificar_whatsapp'] as int? ?? 0) == 1);
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _pageHeader('Ficha de clienta', trailing: PopupMenuButton<String>(onSelected: (value) {
             if (value == 'edit') _push('client_form', 'Editar clienta', data: {'id': id, 'client': client});
@@ -1340,7 +1343,8 @@ class _DashboardShellState extends State<DashboardShell> {
       return;
     }
 
-    if ((client['notificar_whatsapp'] as int? ?? 0) != 1) {
+    final notificationWasManuallySet = (client['notificar_whatsapp_manual'] as int? ?? 0) == 1;
+    if (notificationWasManuallySet && (client['notificar_whatsapp'] as int? ?? 0) != 1) {
       final enableNotifications = await _askYesNo(
         title: 'Notificaciones desactivadas',
         message: 'Notificaciones desactivadas para esta clienta. ¿Deseas activarlas?',
