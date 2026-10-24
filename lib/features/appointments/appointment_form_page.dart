@@ -39,6 +39,7 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
   bool _loading = true;
   bool _saving = false;
   String _clientQuery = '';
+  bool _clientSelectorOpen = false;
 
   @override
   void initState() {
@@ -59,8 +60,8 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
     final clients = loaded[0] as List<Map<String, Object?>>;
     final services = loaded[1] as List<Map<String, Object?>>;
     var clientId = widget.initialClientId;
-    DateTime? date = widget.initialDate;
-    TimeOfDay? time;
+    DateTime? date = widget.initialDate ?? DateTime.now();
+    TimeOfDay? time = TimeOfDay.now();
     final selected = <int>{};
     var note = '';
     var total = 0.0;
@@ -69,7 +70,7 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
       final draft = widget.initialDraft!;
       clientId = draft['clientId'] as int? ?? clientId;
       date = draft['date'] as DateTime? ?? date;
-      time = draft['time'] as TimeOfDay?;
+      time = draft['time'] as TimeOfDay? ?? time;
       selected.addAll((draft['services'] as List<dynamic>? ?? []).whereType<int>());
       note = draft['note'] as String? ?? '';
       total = (draft['total'] as num?)?.toDouble() ?? 0;
@@ -102,6 +103,9 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
       _clients = clients;
       _services = services;
       _clientId = clientId;
+      _clientQuery = '';
+      _clientSelectorOpen = false;
+      _searchClient.text = _labelForSelectedClient(clients, clientId);
       _selectedDate = date;
       _selectedTime = time;
       _selectedServices.addAll(selected);
@@ -143,9 +147,11 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    final launchedFromAgenda = widget.initialDate != null && widget.initialId == null;
+    final initialDate = launchedFromAgenda ? (_selectedDate ?? now) : now;
     final selected = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? now,
+      initialDate: initialDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
       locale: const Locale('es'),
@@ -157,9 +163,12 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
   Future<void> _pickTime() async {
     final selected = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
-      helpText: 'Selecciona la hora',
-      builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!),
+      initialTime: TimeOfDay.now(),
+      helpText: 'Selecciona la hora (AM/PM)',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
+      ),
     );
     if (selected != null) setState(() => _selectedTime = selected);
   }
