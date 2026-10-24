@@ -45,7 +45,7 @@ class ManiGestApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: 'ManiGest',
+      title: 'NailStudio',
       debugShowCheckedModeBanner: false,
       locale: const Locale('es'),
       supportedLocales: const [Locale('es')],

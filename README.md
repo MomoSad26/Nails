@@ -1,6 +1,11 @@
-# ManiGest — Gestión de negocio de uñas
+# NailStudio — Gestión de negocio de uñas
 
-Aplicación Flutter móvil, offline-first y en español para gestionar clientas, citas, servicios, agenda y mensajes preelaborados de WhatsApp. Este proyecto incorpora las reglas funcionales v1.0, las aclaraciones v1.1, la navegación v1.2 y los cambios de Inicio, Citas y formato horario v1.3.
+NailStudio: aplicación Flutter móvil, offline-first y en español para gestionar clientas, citas, servicios, agenda y mensajes preelaborados de WhatsApp. Este proyecto incorpora las reglas funcionales v1.0, las aclaraciones v1.1, la navegación v1.2 y los cambios de Inicio, Citas y formato horario v1.3.
+
+## Identidad visual
+
+- Nombre visible en Android: **NailStudio**.
+- Icono de la aplicación: diseño turquesa y dorado sobre fondo violeta, a sangre y sin márgenes blancos.
 
 ## Lo principal que incluye
 
@@ -55,7 +60,7 @@ El APK se genera en `build/app/outputs/flutter-apk/app-debug.apk`.
 1. Crea un repositorio vacío en GitHub.
 2. Sube el contenido de esta carpeta manteniendo la estructura de carpetas, incluidos `.github/workflows/` y `docs/`.
 3. En la pestaña **Actions**, abre la única ejecución `Compilar APK Android`. Se ejecuta una vez por commit de código en `main` o al lanzarla manualmente; no crea una ejecución de compilación separada por pull request.
-4. Cuando termine con éxito, descarga el artefacto **ManiGest-APK** o usa el enlace fijo https://github.com/MomoSad26/Nails/releases/latest/download/ManiGest.apk.
+4. Cuando termine con éxito, descarga el artefacto **NailStudio-APK** o usa el enlace fijo https://github.com/MomoSad26/Nails/releases/latest/download/NailStudio.apk.
 
 Si no hay una clave válida configurada en Secrets, la ejecución usa una firma temporal. Para instalar futuras versiones encima de la app sin desinstalarla, configura estos cuatro GitHub Actions Secrets con una clave privada propia: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`. No subas el archivo JKS ni las contraseñas al repositorio.
 

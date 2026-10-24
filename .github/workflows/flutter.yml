@@ -6,6 +6,7 @@ on:
     paths:
       - 'lib/**'
       - 'test/**'
+      - 'assets/icon/**'
       - 'pubspec.yaml'
       - 'analysis_options.yaml'
       - '.github/workflows/flutter.yml'
@@ -46,6 +47,21 @@ jobs:
       - name: Instalar dependencias
         run: flutter pub get
 
+      - name: Configurar icono y nombre de la aplicación
+        run: |
+          dart run flutter_launcher_icons
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text(encoding="utf-8")
+          text, changed = re.subn(r'android:label="[^"]+"', 'android:label="NailStudio"', text, count=1)
+          if changed != 1:
+              raise SystemExit("No se encontró android:label en AndroidManifest.xml")
+          manifest.write_text(text, encoding="utf-8")
+          PY
+
       - name: Analizar Dart
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
@@ -84,7 +100,7 @@ jobs:
               -alias "$KEY_ALIAS" \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
-              -dname "CN=ManiGest, OU=Mobile, O=ManiGest, L=Miami, ST=Florida, C=US" \
+              -dname "CN=NailStudio, OU=Mobile, O=NailStudio, L=Miami, ST=Florida, C=US" \
               -noprompt
             echo "::warning::Se usó una firma temporal porque no hay una clave válida en Secrets. Para instalar futuras actualizaciones sin desinstalar, configura los cuatro Secrets de firma."
           fi
@@ -162,7 +178,7 @@ jobs:
           PY
 
       - name: Compilar un único APK firmado
-        run: flutter build apk --release --build-name "1.3.1" --build-number "${GITHUB_RUN_NUMBER}"
+        run: flutter build apk --release --build-name "1.3.2" --build-number "${GITHUB_RUN_NUMBER}"
 
       - name: Verificar el certificado de firma
         run: |
@@ -172,7 +188,7 @@ jobs:
       - name: Publicar el APK como artefacto de Actions
         uses: actions/upload-artifact@v6
         with:
-          name: ManiGest-APK
+          name: NailStudio-APK
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
@@ -183,19 +199,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="v1.3.1-${GITHUB_RUN_NUMBER}"
-          VERSION="1.3.1 (build ${GITHUB_RUN_NUMBER})"
-          cp build/app/outputs/flutter-apk/app-release.apk ManiGest.apk
+          TAG="v1.3.2-${GITHUB_RUN_NUMBER}"
+          VERSION="1.3.2 (build ${GITHUB_RUN_NUMBER})"
+          cp build/app/outputs/flutter-apk/app-release.apk NailStudio.apk
 
-          NOTES="APK firmada de ManiGest. Descarga directa: https://github.com/MomoSad26/Nails/releases/latest/download/ManiGest.apk"
+          NOTES="APK firmada de NailStudio. Descarga directa: https://github.com/MomoSad26/Nails/releases/latest/download/NailStudio.apk"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" ManiGest.apk --clobber
-            gh release edit "$TAG" --title "ManiGest $VERSION" --notes "$NOTES" --latest
+            gh release upload "$TAG" NailStudio.apk --clobber
+            gh release edit "$TAG" --title "NailStudio $VERSION" --notes "$NOTES" --latest
           else
-            gh release create "$TAG" ManiGest.apk \
+            gh release create "$TAG" NailStudio.apk \
               --target "$GITHUB_SHA" \
-              --title "ManiGest $VERSION" \
+              --title "NailStudio $VERSION" \
               --notes "$NOTES" \
               --latest
           fi

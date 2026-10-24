@@ -1,5 +1,12 @@
 # Cambios
 
+## 1.3.2 — Nombre NailStudio e icono de aplicación
+
+- Se cambia el nombre visible de la aplicación a **NailStudio**, incluido el título Flutter y la etiqueta del icono Android.
+- Se incorpora el nuevo icono cuadrado a sangre, sin bordes blancos, y se generan los iconos adaptativos/legacy de Android durante la compilación.
+- Se conserva el nombre interno del paquete Flutter y el identificador Android para no introducir cambios innecesarios en la identidad técnica de la aplicación.
+- El APK de esta versión se publica como `NailStudio.apk`; el artefacto de Actions se llama `NailStudio-APK`.
+
 ## 1.3.1 — Detalle de cita y acciones reversibles
 
 - El detalle se abre desde Citas, Agenda, Inicio y las últimas 10 citas de la ficha de clienta; las acciones se determinan por el estado actual de la cita.
