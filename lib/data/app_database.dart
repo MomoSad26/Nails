@@ -20,8 +20,13 @@ class AppDatabase {
     final file = p.join(root, 'manigest.db');
     _database = await openDatabase(
       file,
-      version: 1,
+      version: 2,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE clientas ADD COLUMN notificar_whatsapp_manual INTEGER NOT NULL DEFAULT 0');
+        }
+      },
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE clientas (
@@ -35,6 +40,7 @@ class AppDatabase {
             fecha_registro TEXT NOT NULL,
             activa INTEGER NOT NULL DEFAULT 1,
             notificar_whatsapp INTEGER NOT NULL DEFAULT 0,
+            notificar_whatsapp_manual INTEGER NOT NULL DEFAULT 0,
             eliminada INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -123,7 +129,7 @@ class AppDatabase {
   }
 
   Future<int> saveClient({int? id, required String nombre, String? telefono, String codigoPais = '+53', String? telefonoLocal, String? nota,
-      bool activa = true, bool notificarWhatsapp = false}) async {
+      bool activa = true, bool notificarWhatsapp = false, bool notificarWhatsappManual = false}) async {
     final db = await database;
     final data = <String, Object?>{
       'nombre': nombre.trim(),
@@ -134,6 +140,7 @@ class AppDatabase {
       'nota': (nota == null || nota.trim().isEmpty) ? null : nota.trim(),
       'activa': activa ? 1 : 0,
       'notificar_whatsapp': (telefono == null || telefono.trim().isEmpty || !notificarWhatsapp) ? 0 : 1,
+      'notificar_whatsapp_manual': (telefono == null || telefono.trim().isEmpty || !notificarWhatsappManual) ? 0 : 1,
     };
     if (id == null) {
       data['fecha_registro'] = _sqlDate(DateTime.now());
@@ -163,7 +170,10 @@ class AppDatabase {
     final db = await database;
     await db.update(
       'clientas',
-      {'notificar_whatsapp': enabled ? 1 : 0},
+      {
+        'notificar_whatsapp': enabled ? 1 : 0,
+        'notificar_whatsapp_manual': 1,
+      },
       where: enabled
           ? 'id = ? AND telefono IS NOT NULL AND telefono != ? AND eliminada = 0'
           : 'id = ? AND eliminada = 0',
@@ -343,6 +353,12 @@ class AppDatabase {
       'estado': status,
       'cerrada_en': finalStatus ? _sqlDate(DateTime.now()) : null,
     }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> restoreAppointmentStatus(int id, {required String status, String? closedAt}) async {
+    final db = await database;
+    await db.update('citas', {'estado': status, 'cerrada_en': closedAt},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> hideAppointment(int id) async {

@@ -1,5 +1,17 @@
 # Cambios
 
+## 1.3.1 — Detalle de cita y acciones reversibles
+
+- El detalle se abre desde Citas, Agenda, Inicio y las últimas 10 citas de la ficha de clienta; las acciones se determinan por el estado actual de la cita.
+- Programadas muestra Editar cita, Notificar por WhatsApp, Llamar (si hay teléfono), Reprogramar, Cancelar, Eliminar y Terminar, en ese orden; no muestra No asistió.
+- Pendientes por cerrar muestra Llamar (si hay teléfono), Reprogramar, Cancelar, Eliminar, No asistió y Terminar; no aparecen Editar cita ni Notificar por WhatsApp.
+- Historial y cualquier cita cerrada solo muestran Eliminar.
+- Cancelar, No asistió y Terminar requieren confirmación y permiten Deshacer durante 5 segundos; el temporizador continúa al navegar, retira cada aviso al vencer y restaura el estado previo si se usa Deshacer.
+- Reprogramar usa la fecha y hora actuales como valores iniciales y conserva clienta, servicios, total y nota; si la nueva fecha/hora ya pasó, pasa a Pendientes por cerrar.
+- Notificar por WhatsApp prepara el texto para la cita seleccionada, permite editarlo antes de abrir WhatsApp y reanuda el flujo después de agregar un teléfono.
+- El código de país permite elegir códigos habituales (con +53 por defecto) o escribir otro; al agregar teléfono se activa WhatsApp por defecto, mientras la elección manual del toggle se conserva.
+- La fecha del detalle incluye el día de la semana; las horas siguen en formato de 12 horas con AM/PM.
+
 ## 1.3.0 — Inicio final, Citas y formato horario
 
 - Inicio queda con saludo, fecha, número de citas de hoy, lista compacta ordenada por hora, cuatro accesos rápidos verticales, contadores semanales y aviso de catálogo vacío condicional.

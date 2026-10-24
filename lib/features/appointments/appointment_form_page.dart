@@ -80,8 +80,14 @@ class _AppointmentFormPageState extends State<AppointmentFormPage> {
       if (appointment != null) {
         clientId = appointment['clienta_id'] as int;
         final dateTime = DateTime.parse(appointment['fecha_hora'] as String);
-        date = DateTime(dateTime.year, dateTime.month, dateTime.day);
-        time = TimeOfDay(hour: dateTime.hour, minute: dateTime.minute);
+        if (widget.resetStatusOnSave) {
+          final now = DateTime.now();
+          date = DateTime(now.year, now.month, now.day);
+          time = TimeOfDay.now();
+        } else {
+          date = DateTime(dateTime.year, dateTime.month, dateTime.day);
+          time = TimeOfDay(hour: dateTime.hour, minute: dateTime.minute);
+        }
         note = appointment['nota'] as String? ?? '';
         total = (appointment['precio_total'] as num).toDouble();
         final currentServices = await widget.db.getAppointmentServices(widget.initialId!);

@@ -7,6 +7,12 @@ void main() {
     await initializeDateFormatting('es');
   });
 
+  group('formatDateLongWithWeekday', () {
+    test('includes weekday and full date in Spanish', () {
+      expect(formatDateLongWithWeekday(DateTime(2026, 10, 17)), 'sábado, 17 de octubre de 2026');
+    });
+  });
+
   group('formatTime', () {
     test('uses 12-hour time with explicit AM/PM', () {
       expect(formatTime(DateTime(2026, 10, 23, 0, 5)), '12:05 AM');

@@ -25,6 +25,8 @@ class _ClientFormPageState extends State<ClientFormPage> {
   final _note = TextEditingController();
   bool _active = true;
   bool _notifyWhatsapp = false;
+  bool _notifyWhatsappManuallySet = false;
+  bool _phoneWasPresent = false;
   bool _loading = true;
   bool _saving = false;
   Map<String, Object?>? _client;
@@ -43,6 +45,8 @@ class _ClientFormPageState extends State<ClientFormPage> {
       _client = client;
       _name.text = client['nombre'] as String? ?? '';
       final hasSavedPhone = (client['telefono'] as String?)?.isNotEmpty == true;
+      _phoneWasPresent = hasSavedPhone;
+      _notifyWhatsappManuallySet = (client['notificar_whatsapp_manual'] as int? ?? 0) == 1;
       _countryCode.text = hasSavedPhone ? (client['codigo_pais'] as String? ?? '+53') : '+53';
       _phone.text = client['telefono_local'] as String? ?? '';
       // Compatibility fallback in case a database created by an earlier build lacks split fields.
@@ -58,7 +62,9 @@ class _ClientFormPageState extends State<ClientFormPage> {
       }
       _note.text = client['nota'] as String? ?? '';
       _active = (client['activa'] as int? ?? 1) == 1;
-      _notifyWhatsapp = (client['notificar_whatsapp'] as int? ?? 0) == 1;
+      _notifyWhatsapp = hasSavedPhone
+          ? (_notifyWhatsappManuallySet ? (client['notificar_whatsapp'] as int? ?? 0) == 1 : true)
+          : false;
     }
     setState(() => _loading = false);
   }
@@ -96,6 +102,7 @@ class _ClientFormPageState extends State<ClientFormPage> {
         nota: _note.text,
         activa: _active,
         notificarWhatsapp: _notifyWhatsapp,
+        notificarWhatsappManual: _notifyWhatsappManuallySet,
       );
       await widget.onSave(id);
     } catch (error) {
@@ -123,7 +130,73 @@ class _ClientFormPageState extends State<ClientFormPage> {
           const Text('Teléfono (opcional)', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(width: 104, child: TextFormField(controller: _countryCode, keyboardType: TextInputType.phone, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[+0-9]'))], decoration: const InputDecoration(labelText: 'Código', hintText: '+53'), validator: (value) => _phone.text.trim().isNotEmpty && (value == null || !RegExp(r'^\+[0-9]{1,4}$').hasMatch(value.trim())) ? 'Ej. +53' : null)),
+            SizedBox(width: 124, child: TextFormField(
+              controller: _countryCode,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[+0-9]'))],
+              decoration: InputDecoration(
+                labelText: 'Código',
+                hintText: '+53',
+                suffixIcon: PopupMenuButton<String>(
+                  tooltip: 'Seleccionar código de país',
+                  icon: const Icon(Icons.arrow_drop_down_rounded),
+                  onSelected: (value) => setState(() => _countryCode.text = value),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: '+53', child: Text('+53 · Cuba')),
+                    PopupMenuItem(value: '+1', child: Text('+1 · EE. UU. / Canadá')),
+                    PopupMenuItem(value: '+34', child: Text('+34 · España')),
+                    PopupMenuItem(value: '+52', child: Text('+52 · México')),
+                    PopupMenuItem(value: '+57', child: Text('+57 · Colombia')),
+                    PopupMenuItem(value: '+58', child: Text('+58 · Venezuela')),
+                    PopupMenuItem(value: '+54', child: Text('+54 · Argentina')),
+                    PopupMenuItem(value: '+55', child: Text('+55 · Brasil')),
+                    PopupMenuItem(value: '+56', child: Text('+56 · Chile')),
+                    PopupMenuItem(value: '+51', child: Text('+51 · Perú')),
+                    PopupMenuItem(value: '+593', child: Text('+593 · Ecuador')),
+                    PopupMenuItem(value: '+44', child: Text('+44 · Reino Unido')),
+                  ],
+                ),
+              ),
+              validator: (value) => _phone.text.trim().isNotEmpty &&
+                  (value == null || !RegExp(r'^\+[0-9]{1,4}
+            const SizedBox(width: 8),
+            Expanded(child: TextFormField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Número de teléfono', hintText: '5 1234567'), onChanged: (value) => setState(() {
+              final hasPhone = value.trim().isNotEmpty;
+              if (!hasPhone) {
+                _notifyWhatsapp = false;
+                _notifyWhatsappManuallySet = false;
+              } else if (!_phoneWasPresent) {
+                _notifyWhatsapp = true;
+                _notifyWhatsappManuallySet = false;
+              }
+              _phoneWasPresent = hasPhone;
+            }))),
+          ]),
+          const SizedBox(height: 12),
+          TextFormField(controller: _note, minLines: 3, maxLines: 6, decoration: const InputDecoration(labelText: 'Nota', alignLabelWithHint: true, hintText: 'Preferencias, alergias a productos, observaciones…')),
+          const SizedBox(height: 12),
+          if (_client != null) _detailLineLocal(Icons.event_available_rounded, 'Fecha de registro', formatDateLong(DateTime.parse(_client!['fecha_registro'] as String))),
+          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Clienta activa'), subtitle: const Text('Las clientas inactivas se conservan en el historial.'), value: _active, onChanged: (value) => setState(() => _active = value)),
+          if (_phone.text.trim().isNotEmpty) SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Notificar por WhatsApp'), subtitle: const Text('La app prepara el mensaje; el envío se confirma en WhatsApp.'), value: _notifyWhatsapp, onChanged: (value) => setState(() {
+                _notifyWhatsapp = value;
+                _notifyWhatsappManuallySet = true;
+              })),
+          const SizedBox(height: 12),
+          FilledButton.icon(onPressed: _saving ? null : _submit, icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_rounded), label: Text(_saving ? 'Guardando…' : 'Guardar clienta')),
+        ]),
+      )),
+    ]);
+  }
+
+  Widget _detailLineLocal(IconData icon, String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(children: [Icon(icon, size: 19, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 10), Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)), Expanded(child: Text(value))]),
+      );
+}
+).hasMatch(value.trim()))
+                  ? 'Ej. +53'
+                  : null,
+            )),
             const SizedBox(width: 8),
             Expanded(child: TextFormField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Número de teléfono', hintText: '5 1234567'), onChanged: (_) => setState(() { if (_phone.text.trim().isEmpty) _notifyWhatsapp = false; }))),
           ]),

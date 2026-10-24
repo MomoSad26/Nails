@@ -29,10 +29,17 @@ class _PanelRoute {
 }
 
 class _PendingUndo {
-  _PendingUndo({required this.label, required this.restore, required this.finalize});
+  _PendingUndo({
+    required this.id,
+    required this.label,
+    required this.restore,
+    required this.finalize,
+  });
+  final int id;
   final String label;
   final Future<void> Function() restore;
   final Future<void> Function() finalize;
+  Timer? timer;
 }
 
 class DashboardShell extends StatefulWidget {
@@ -51,12 +58,11 @@ class _DashboardShellState extends State<DashboardShell> {
   Map<String, String> _settings = {};
   bool _loading = true;
   Timer? _transitionTimer;
-  Timer? _undoTimer;
-  _PendingUndo? _pendingUndo;
+  final Map<int, _PendingUndo> _pendingUndos = {};
+  int _nextUndoId = 0;
   String _clientSearch = '';
   int _appointmentsTab = 0;
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
-  bool _performingUndo = false;
   bool _edgeSwipeActive = false;
   double _edgeSwipeDistance = 0;
 
@@ -104,55 +110,56 @@ class _DashboardShellState extends State<DashboardShell> {
   @override
   void dispose() {
     _transitionTimer?.cancel();
-    _undoTimer?.cancel();
+    for (final pending in _pendingUndos.values) {
+      pending.timer?.cancel();
+    }
     _outgoingTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _commitPendingUndo() async {
-    _undoTimer?.cancel();
-    final pending = _pendingUndo;
-    _pendingUndo = null;
-    if (pending != null) {
-      await pending.finalize();
+  Future<void> _scheduleUndo({
+    required String label,
+    required Future<void> Function() restore,
+    required Future<void> Function() finalize,
+  }) {
+    final pending = _PendingUndo(
+      id: ++_nextUndoId,
+      label: label,
+      restore: restore,
+      finalize: finalize,
+    );
+    if (!mounted) return pending.finalize();
+    _pendingUndos[pending.id] = pending;
+    setState(() {});
+    pending.timer = Timer(const Duration(seconds: 5), () async {
+      final active = _pendingUndos.remove(pending.id);
+      if (active == null) return;
+      if (mounted) setState(() {});
+      await active.finalize();
+      if (mounted) await _refresh();
+    });
+    return Future<void>.value();
+  }
+
+  Future<void> _undoPending(int id) async {
+    final pending = _pendingUndos.remove(id);
+    if (pending == null) return;
+    pending.timer?.cancel();
+    if (mounted) setState(() {});
+    try {
+      await pending.restore();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo deshacer la acción: $error')),
+        );
+      }
+    } finally {
       if (mounted) await _refresh();
     }
   }
 
-  Future<void> _scheduleUndo({required String label, required Future<void> Function() restore,
-      required Future<void> Function() finalize}) async {
-    await _commitPendingUndo();
-    _pendingUndo = _PendingUndo(label: label, restore: restore, finalize: finalize);
-    _undoTimer = Timer(const Duration(seconds: 5), () async {
-      final pending = _pendingUndo;
-      _pendingUndo = null;
-      if (pending != null) {
-        await pending.finalize();
-        if (mounted) await _refresh();
-      }
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      duration: const Duration(seconds: 5),
-      content: Text(label),
-      behavior: SnackBarBehavior.floating,
-      action: SnackBarAction(label: 'Deshacer', onPressed: () async {
-        if (_performingUndo) return;
-        _performingUndo = true;
-        _undoTimer?.cancel();
-        final pending = _pendingUndo;
-        _pendingUndo = null;
-        if (pending != null) await pending.restore();
-        _performingUndo = false;
-        await _refresh();
-      }),
-    ));
-  }
-
   void _push(String kind, String title, {Map<String, dynamic>? data}) {
-    if (_pendingUndo != null) ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    unawaited(_commitPendingUndo());
     _outgoingTimer?.cancel();
     setState(() {
       _outgoingRoute = null;
@@ -227,6 +234,47 @@ class _DashboardShellState extends State<DashboardShell> {
     );
     await _refresh();
     if (_route.kind == 'appointment_detail') _goBack();
+  }
+
+  Future<void> _changeAppointmentStatusWithUndo(int id, String status) async {
+    final appointment = await _db.getAppointment(id);
+    if (appointment == null) return;
+    final action = switch (status) {
+      'Cancelada' => 'Cancelar cita',
+      'No_asistio' => 'Marcar cita como No asistió',
+      'Terminada' => 'Terminar cita',
+      _ => 'Actualizar cita',
+    };
+    final message = switch (status) {
+      'Cancelada' => '¿Deseas cancelar esta cita?',
+      'No_asistio' => '¿Confirmas que la clienta no asistió?',
+      'Terminada' => '¿Deseas marcar la cita como terminada?',
+      _ => '¿Deseas actualizar el estado de esta cita?',
+    };
+    final confirmed = await _confirm(
+      title: action,
+      message: '$message Podrás deshacerlo durante 5 segundos.',
+    );
+    if (!confirmed) return;
+    final previousStatus = appointment['estado'] as String;
+    final previousClosedAt = appointment['cerrada_en'] as String?;
+    final label = switch (status) {
+      'Cancelada' => 'Cita cancelada',
+      'No_asistio' => 'Cita marcada como No asistió',
+      'Terminada' => 'Cita terminada',
+      _ => 'Cita actualizada',
+    };
+    await _db.changeAppointmentStatus(id, status);
+    await _scheduleUndo(
+      label: label,
+      restore: () => _db.restoreAppointmentStatus(
+        id,
+        status: previousStatus,
+        closedAt: previousClosedAt,
+      ),
+      finalize: () async {},
+    );
+    await _refresh();
   }
 
   Future<void> _deleteClient(int id) async {
@@ -424,12 +472,13 @@ class _DashboardShellState extends State<DashboardShell> {
       case 'client_detail': return _clientDetailPage(route.data['id'] as int);
       case 'client_form': return ClientFormPage(
         db: _db,
-        key: ValueKey('client-form-${route.data['id'] ?? 'new'}-${route.data['returnToAppointment'] == true}'),
+        key: ValueKey('client-form-${route.data['id'] ?? 'new'}-${route.data['returnToAppointment'] == true}-${route.data['returnToWhatsappAppointmentId'] ?? ''}'),
         initial: route.data['id'] == null ? null : route.data['client'] as Map<String, Object?>?,
         clientId: route.data['id'] as int?,
         onCreateClient: route.data['returnToAppointment'] == true,
         onBack: _goBack,
         onSave: (id) async {
+          final resumeWhatsAppAppointmentId = route.data['returnToWhatsappAppointmentId'] as int?;
           await _refresh();
           if (route.data['returnToAppointment'] == true && _stack.isNotEmpty && _stack.last.kind == 'appointment_form') {
             final previous = _stack.last;
@@ -439,9 +488,12 @@ class _DashboardShellState extends State<DashboardShell> {
             previous.data['draft'] = draft;
           }
           _goBack();
+          if (resumeWhatsAppAppointmentId != null) {
+            await _prepareAppointmentMessage(resumeWhatsAppAppointmentId, askToAddPhone: false);
+          }
         },
       );
-      case 'appointment_detail': return _appointmentDetailPage(route.data['id'] as int, history: route.data['history'] == true);
+      case 'appointment_detail': return _appointmentDetailPage(route.data['id'] as int);
       case 'appointment_history': return _appointmentHistorySection();
       case 'appointment_form': return AppointmentFormPage(
         key: ValueKey('appointment-form-${route.data['id'] ?? 'new'}-${route.data['date'] ?? ''}-${route.data['clientId'] ?? ''}'),
@@ -517,7 +569,8 @@ class _DashboardShellState extends State<DashboardShell> {
                 _edgeSwipeActive = false;
                 _edgeSwipeDistance = 0;
               },
-              child: Stack(children: routeEntries.map((entry) {
+              child: Stack(children: [
+              ...routeEntries.map((entry) {
                 final isCurrent = entry.id == _route.id;
                 final isOutgoing = entry.id == _outgoingRoute?.id;
                 return Positioned.fill(
@@ -540,8 +593,50 @@ class _DashboardShellState extends State<DashboardShell> {
                     ),
                   ),
                 );
-              }).toList()),
-            ),
+              }).toList(),
+              if (_pendingUndos.isNotEmpty)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: SafeArea(
+                    top: false,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 220),
+                      child: SingleChildScrollView(
+                        reverse: true,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _pendingUndos.values.toList().reversed.map((pending) => Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Material(
+                              elevation: 8,
+                              color: const Color(0xFF1D4965),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                child: Row(children: [
+                                  Expanded(child: Text(
+                                    pending.label,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Color(0xFFF0F6FF), fontWeight: FontWeight.w600),
+                                  )),
+                                  TextButton(
+                                    onPressed: () => _undoPending(pending.id),
+                                    child: const Text('Deshacer'),
+                                  ),
+                                ]),
+                              ),
+                            ),
+                          )).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ]),
+            )
           ),
         ),
       ),
@@ -1022,8 +1117,7 @@ class _DashboardShellState extends State<DashboardShell> {
         _ => null,
       };
       if (status == null) return;
-      await _db.changeAppointmentStatus(id, status);
-      await _refresh();
+      await _changeAppointmentStatusWithUndo(id, status);
     }
   }
 
@@ -1198,139 +1292,183 @@ class _DashboardShellState extends State<DashboardShell> {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 19, color: _accent), const SizedBox(width: 10), SizedBox(width: 125, child: Text(label, style: TextStyle(color: const Color(0xFFC0D0E0)))), Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))) ]),
       );
 
-  Widget _appointmentDetailPage(int id, {bool history = false}) {
+  Future<Map<String, Object?>?> _loadAppointmentDetail(int id) async {
+    await _db.transitionOverdueAppointments();
+    return _db.getAppointment(id);
+  }
+
+  Future<void> _callAppointmentClient(String phone) async {
+    if (phone.trim().isEmpty) return;
+    final launched = await WhatsAppService.callPhone(phone);
+    if (!mounted) return;
+    if (!launched) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el marcador del teléfono.')),
+      );
+    }
+  }
+
+  Future<void> _prepareAppointmentMessage(int id, {bool askToAddPhone = true}) async {
+    final appointment = await _db.getAppointment(id);
+    if (appointment == null) return;
+    final clientId = appointment['clienta_id'] as int;
+    final client = await _db.getClient(clientId);
+    if (client == null) return;
+    final phone = (client['telefono'] as String?)?.trim() ?? '';
+    if (phone.isEmpty) {
+      if (!askToAddPhone) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Añade un número de contacto para preparar el mensaje.')),
+          );
+        }
+        return;
+      }
+      final addPhone = await _askYesNo(
+        title: 'Falta el número de contacto',
+        message: 'Esta clienta no tiene número de WhatsApp. ¿Deseas agregar número de contacto?',
+        yesText: 'Sí',
+        noText: 'No',
+      );
+      if (addPhone) {
+        _push('client_form', 'Editar clienta', data: {
+          'id': clientId,
+          'client': client,
+          'returnToWhatsappAppointmentId': id,
+        });
+      }
+      return;
+    }
+
+    if ((client['notificar_whatsapp'] as int? ?? 0) != 1) {
+      final enableNotifications = await _askYesNo(
+        title: 'Notificaciones desactivadas',
+        message: 'Notificaciones desactivadas para esta clienta. ¿Deseas activarlas?',
+        yesText: 'Activar',
+        noText: 'No, gracias',
+      );
+      if (!enableNotifications) return;
+      await _db.setClientWhatsAppEnabled(clientId, true);
+      await _refresh();
+    }
+    final date = DateTime.parse(appointment['fecha_hora'] as String);
+    final message = 'Hola ${client['nombre']}, recuerde que ${relativeAppointmentDate(date, DateTime.now())} tiene cita conmigo a las ${formatTime(date)}. Por favor, si se le presenta algún problema me avisa con antelación. Gracias.';
+    _push('whatsapp_preview', 'Vista previa de WhatsApp', data: {
+      'message': message,
+      'phone': phone,
+      'title': 'Notificación de cita',
+    });
+  }
+
+  Widget _appointmentDetailPage(int id) {
     return FutureBuilder<Map<String, Object?>?>(
-      future: _db.getAppointment(id),
+      future: _loadAppointmentDetail(id),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final appointment = snapshot.data;
         if (appointment == null) {
-          return Column(
-            children: [
-              _pageHeader('Detalle de cita'),
-              const Expanded(child: Center(child: Text('La cita ya no está disponible.'))),
-            ],
-          );
+          return Column(children: [
+            _pageHeader('Detalle de cita'),
+            const Expanded(child: Center(child: Text('La cita ya no está disponible.'))),
+          ]);
         }
         final date = DateTime.parse(appointment['fecha_hora'] as String);
         final services = (appointment['servicios'] as List<Map<String, Object?>>?) ?? [];
         final status = appointment['estado'] as String;
+        final isClosed = const {'Terminada', 'Cancelada', 'No_asistio'}.contains(status);
+        final phone = (appointment['clienta_telefono'] as String?)?.trim() ?? '';
+        final actions = <Widget>[];
+        if (!isClosed && status == 'Programada') {
+          actions.add(_primaryButton('Editar cita', () => _openAppointmentForm(id: id), icon: Icons.edit_rounded));
+          actions.add(OutlinedButton.icon(
+            onPressed: () => _prepareAppointmentMessage(id),
+            icon: const Icon(Icons.chat_rounded),
+            label: const Text('Notificar por WhatsApp'),
+          ));
+        }
+        if (!isClosed && phone.isNotEmpty) {
+          actions.add(OutlinedButton.icon(
+            onPressed: () => _callAppointmentClient(phone),
+            icon: const Icon(Icons.call_rounded),
+            label: const Text('Llamar'),
+          ));
+        }
+        if (!isClosed) {
+          actions.add(OutlinedButton.icon(
+            onPressed: () => _openAppointmentForm(id: id, reprogram: true),
+            icon: const Icon(Icons.event_repeat_rounded),
+            label: const Text('Reprogramar'),
+          ));
+          actions.add(OutlinedButton.icon(
+            onPressed: () => _changeAppointmentStatusWithUndo(id, 'Cancelada'),
+            icon: const Icon(Icons.event_busy_rounded),
+            label: const Text('Cancelar'),
+          ));
+        }
+        actions.add(OutlinedButton.icon(
+          onPressed: () => _deleteAppointment(id),
+          icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF9292)),
+          label: const Text('Eliminar'),
+        ));
+        if (status == 'Pendiente_de_cerrar') {
+          actions.add(OutlinedButton.icon(
+            onPressed: () => _changeAppointmentStatusWithUndo(id, 'No_asistio'),
+            icon: const Icon(Icons.person_off_rounded),
+            label: const Text('No asistió'),
+          ));
+        }
+        if (!isClosed) {
+          actions.add(_primaryButton(
+            'Terminar',
+            () => _changeAppointmentStatusWithUndo(id, 'Terminada'),
+            icon: Icons.check_circle_outline_rounded,
+          ));
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _pageHeader('Detalle de cita'),
             Expanded(
-              child: ListView(
-                children: [
-                  _bodyCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                appointment['clienta_nombre'] as String,
-                                style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                            StatusChip(status: status, accentColor: _accent),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _detailLine(Icons.calendar_today_rounded, 'Fecha', formatDateLong(date)),
-                        _detailLine(Icons.schedule_rounded, 'Hora', formatTime(date)),
-                        _detailLine(Icons.payments_outlined, 'Precio total', _currency(appointment['precio_total'] as num)),
-                        _detailLine(
-                          Icons.notes_rounded,
-                          'Nota',
-                          (appointment['nota'] as String?)?.isNotEmpty == true
-                              ? appointment['nota'] as String
-                              : 'Sin notas',
-                        ),
-                        const Divider(height: 24),
-                        const Text('Servicios', style: TextStyle(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 8),
-                        if (services.isEmpty)
-                          const Text('No hay servicios registrados')
-                        else
-                          ...services.map((service) => Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: Text(service['nombre_snapshot'] as String)),
-                                    Text(
-                                      _currency(service['precio_snapshot'] as num),
-                                      style: const TextStyle(fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
-                                ),
-                              )),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _bodyCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Acciones', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        if (history)
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () => _deleteAppointment(id),
-                              icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF9292)),
-                              label: const Text('Eliminar'),
-                            ),
-                          )
-                        else
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              if (status != 'Terminada')
-                                _primaryButton('Terminar', () async {
-                                  await _db.changeAppointmentStatus(id, 'Terminada');
-                                  await _refresh();
-                                }, icon: Icons.check_circle_outline_rounded),
-                              if (status != 'Cancelada')
-                                OutlinedButton.icon(
-                                  onPressed: () async {
-                                    await _db.changeAppointmentStatus(id, 'Cancelada');
-                                    await _refresh();
-                                  },
-                                  icon: const Icon(Icons.event_busy_rounded),
-                                  label: const Text('Cancelar'),
-                                ),
-                              OutlinedButton.icon(
-                                onPressed: () => _openAppointmentForm(id: id, reprogram: true),
-                                icon: const Icon(Icons.event_repeat_rounded),
-                                label: const Text('Reprogramar'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: () => _deleteAppointment(id),
-                                icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF9292)),
-                                label: const Text('Eliminar'),
-                              ),
-                              if (status != 'No_asistio')
-                                OutlinedButton.icon(
-                                  onPressed: () async {
-                                    await _db.changeAppointmentStatus(id, 'No_asistio');
-                                    await _refresh();
-                                  },
-                                  icon: const Icon(Icons.person_off_rounded),
-                                  label: const Text('No asistió'),
-                                ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+              child: ListView(children: [
+                _bodyCard(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Expanded(child: Text(appointment['clienta_nombre'] as String,
+                        style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800))),
+                      StatusChip(status: status, accentColor: _accent),
+                    ]),
+                    const SizedBox(height: 14),
+                    _detailLine(Icons.calendar_today_rounded, 'Fecha', formatDateLongWithWeekday(date)),
+                    _detailLine(Icons.schedule_rounded, 'Hora', formatTime(date)),
+                    _detailLine(Icons.payments_outlined, 'Precio total', _currency(appointment['precio_total'] as num)),
+                    _detailLine(Icons.notes_rounded, 'Nota',
+                      (appointment['nota'] as String?)?.isNotEmpty == true ? appointment['nota'] as String : 'Sin notas'),
+                    const Divider(height: 24),
+                    const Text('Servicios', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    if (services.isEmpty) const Text('No hay servicios registrados')
+                    else ...services.map((service) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(children: [
+                        Expanded(child: Text(service['nombre_snapshot'] as String)),
+                        Text(_currency(service['precio_snapshot'] as num),
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ]),
+                    )),
+                  ],
+                )),
+                const SizedBox(height: 12),
+                _bodyCard(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Acciones', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 12),
+                    Wrap(spacing: 8, runSpacing: 8, children: actions),
+                  ],
+                )),
+                const SizedBox(height: 20),
+              ]),
             ),
           ],
         );
@@ -1339,37 +1477,22 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   Future<void> _prepareClientMessage(Map<String, Object?> client, List<Map<String, Object?>> history) async {
-    final phone = client['telefono'] as String?;
     final clientId = client['id'] as int;
-    if (phone == null || phone.trim().isEmpty) {
-      final addPhone = await _askYesNo(
-        title: 'Falta el número de contacto',
-        message: 'Esta clienta no tiene número de WhatsApp. ¿Deseas agregar un número de contacto?',
-        yesText: 'Sí, agregar',
-      );
-      if (addPhone) _push('client_form', 'Editar clienta', data: {'id': clientId, 'client': client});
-      return;
-    }
-    if ((client['notificar_whatsapp'] as int? ?? 0) != 1) {
-      final enableNotifications = await _confirm(
-        title: 'Notificaciones desactivadas',
-        message: 'Las notificaciones están desactivadas para esta clienta. ¿Deseas activarlas para preparar el mensaje?',
-      );
-      if (!enableNotifications) return;
-      await _db.setClientWhatsAppEnabled(clientId, true);
-      await _refresh();
-    }
     final now = DateTime.now();
-    final upcoming = history.where((a) => a['estado'] == 'Programada' && DateTime.parse(a['fecha_hora'] as String).isAfter(now)).toList()
+    final upcoming = history.where((appointment) {
+      final date = DateTime.parse(appointment['fecha_hora'] as String);
+      return appointment['clienta_id'] == clientId &&
+          appointment['estado'] == 'Programada' &&
+          date.isAfter(now);
+    }).toList()
       ..sort((a, b) => (a['fecha_hora'] as String).compareTo(b['fecha_hora'] as String));
-    final appointment = upcoming.isNotEmpty ? upcoming.first : null;
-    if (appointment == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Esta clienta no tiene una cita futura programada. Agenda una cita primero.')));
+    if (upcoming.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Esta clienta no tiene una cita futura programada. Agenda una cita primero.')),
+      );
       return;
     }
-    final date = DateTime.parse(appointment['fecha_hora'] as String);
-    final message = 'Hola ${client['nombre']}, recuerde que ${relativeAppointmentDate(date, now)} tiene cita conmigo a las ${formatTime(date)}. Por favor, si se le presenta algún problema me avisa con antelación. Gracias.';
-    _push('whatsapp_preview', 'Vista previa de WhatsApp', data: {'message': message, 'phone': phone, 'title': 'Notificación de cita'});
+    await _prepareAppointmentMessage(upcoming.first['id'] as int);
   }
 
   Future<void> _prepareCatalogMessage({bool openWhatsApp = false}) async {

@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 
 String formatDateLong(DateTime date) => DateFormat("d 'de' MMMM 'de' y", 'es').format(date);
+String formatDateLongWithWeekday(DateTime date) => DateFormat("EEEE, d 'de' MMMM 'de' y", 'es').format(date);
 String formatDateCompact(DateTime date) => DateFormat('dd/MM/yyyy', 'es').format(date);
 String formatDateWithWeekday(DateTime date) => DateFormat("EEEE, d 'de' MMMM", 'es').format(date);
 String formatTime(DateTime date) => formatTimeParts(date.hour, date.minute);
